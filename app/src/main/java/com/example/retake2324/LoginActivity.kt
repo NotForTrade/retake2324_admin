@@ -41,6 +41,6 @@ class LoginActivity : AppCompatActivity() {
     private fun validateCredentials(username: String, password: String): Boolean {
         // Replace with actual validation logic
         // For example, checking against hardcoded credentials or a database
-        return username == "admin" && password == "password" // Example credentials
+        return username == "admin" && password == "password"
     }
 }
