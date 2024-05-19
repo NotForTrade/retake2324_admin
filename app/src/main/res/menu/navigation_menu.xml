@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:id="@+id/ProfileFragment"
+        android:title="Profile"
+        android:icon="@drawable/baseline_account_circle_24"/>
+
+    <item android:id="@+id/DashboardFragment"
+        android:title="Dashboard"
+        android:icon="@drawable/baseline_home_24"/>
+
+    <item android:id="@+id/LogoutFragment"
+        android:title="Logout"
+        android:icon="@drawable/baseline_air_24"/>
+
+
+</menu>

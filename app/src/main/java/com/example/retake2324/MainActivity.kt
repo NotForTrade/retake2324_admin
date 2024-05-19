@@ -10,7 +10,6 @@ import androidx.recyclerview.widget.RecyclerView
 
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var componentsAdapter: ComponentsAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,14 +27,10 @@ class MainActivity : AppCompatActivity() {
             finish() // Close MainActivity
         } else {
 
-            // Replace this with your actual data for components
-            val components = listOf(
-                Component("Component 1", listOf("Skill A", "Skill B")),
-                Component("Component 2", listOf("Skill C", "Skill D", "Skill E")),
-                Component("Component 3", listOf("Skill F"))
-            )
+            val intent = Intent(this, GroupsOverviewActivity::class.java)
+            startActivity(intent)
+            finish() // Close MainActivity
 
-            componentsAdapter = ComponentsAdapter(components)
         }
     }
 
