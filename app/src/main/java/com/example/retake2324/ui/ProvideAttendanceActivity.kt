@@ -5,11 +5,14 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -27,8 +34,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.retake2324.core.App
 import com.example.retake2324.data.Attendance
 import com.example.retake2324.data.Component
@@ -36,10 +45,13 @@ import com.example.retake2324.data.Group
 import com.example.retake2324.data.Schemas
 import com.example.retake2324.data.TutorMapping
 import com.example.retake2324.data.User
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
+import org.ktorm.dsl.insert
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
@@ -64,7 +76,10 @@ class ProvideAttendanceActivity : ComponentActivity() {
     }
 
 
-    private suspend fun fetchObjects(database: Database, tutorId: Int): Triple<User?, List<Component>, List<Attendance>> {
+    private suspend fun fetchObjects(
+        database: Database,
+        tutorId: Int
+    ): Triple<User?, List<Component>, List<Attendance>> {
 
         try {
 
@@ -84,7 +99,8 @@ class ProvideAttendanceActivity : ComponentActivity() {
                 if (tutor.role.name == "Tutor") {
                     // Fetch all the students from the user's group
                     componentGroupPairs = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.TutorMappings).filter { it.tutorId eq tutorId }.toList()
+                        database.sequenceOf(Schemas.TutorMappings).filter { it.tutorId eq tutorId }
+                            .toList()
                     }
                 } else { // Higher privilege has no filter restriction
                     componentGroupPairs = withContext(Dispatchers.IO) {
@@ -101,7 +117,8 @@ class ProvideAttendanceActivity : ComponentActivity() {
                 }
                 // Fetch the list of students
                 val students = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Users).filter { it.roleId eq studentRole!!.id }.toList()
+                    database.sequenceOf(Schemas.Users).filter { it.roleId eq studentRole!!.id }
+                        .toList()
                 }
                 val groups = withContext(Dispatchers.IO) {
                     database.sequenceOf(Schemas.Groups).toList()
@@ -116,7 +133,7 @@ class ProvideAttendanceActivity : ComponentActivity() {
                     // Collect all the components the tutor is assigned to
                     val assignedComponents: MutableList<Component> = mutableListOf(Component())
                     componentGroupPairs.forEach { pair ->
-                        components.find {it.name == pair.component.name}
+                        components.find { it.name == pair.component.name }
                             ?.let { assignedComponents.add(it) }
                     }
 
@@ -130,8 +147,9 @@ class ProvideAttendanceActivity : ComponentActivity() {
                         // Attribute all the groups to the components
 
                         assignedComponents.forEach { assignedComponent ->
-                            val assignedGroupToAssignedComponent: MutableList<Group> = mutableListOf(Group())
-                            componentGroupPairs.forEach {pair ->
+                            val assignedGroupToAssignedComponent: MutableList<Group> =
+                                mutableListOf(Group())
+                            componentGroupPairs.forEach { pair ->
                                 if (pair.component.id == assignedComponent.id) {
                                     assignedGroupToAssignedComponent.add(pair.group)
                                 }
@@ -170,7 +188,10 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
         LaunchedEffect(Unit) {
             val database = app.getDatabase() // Reuse the existing database connection
-            val (fetchedTutor, fetchedComponents, fetchedAttendances) = fetchObjects(database, tutorId)
+            val (fetchedTutor, fetchedComponents, fetchedAttendances) = fetchObjects(
+                database,
+                tutorId
+            )
 
             // Update the states
             tutor = fetchedTutor
@@ -187,119 +208,255 @@ class ProvideAttendanceActivity : ComponentActivity() {
     }
 
     @Composable
-    fun ProvideAttendanceScreen(app: App, tutor: User?, components: List<Component>, attendances: List<Attendance>) {
+    fun ProvideAttendanceScreen(
+        app: App,
+        tutor: User?,
+        components: List<Component>,
+        attendances: List<Attendance>
+    ) {
         val context = LocalContext.current
-        val expandedComponents = remember { mutableStateOf(components.map { it.id }.toSet()) }
 
-        val columnWidths = listOf(200.dp) + listOf(100.dp)
+        // Number of sessions per component
+        val sessions = 1..8
+
+        // Attendances values
+        val attendanceValues = listOf("Present", "Absent without proof", "Absent with proof", "Late")
+
+        // Components' box variables
+        var selectedComponent: Component? by remember { mutableStateOf(null) }
+        var componentsBoxExpanded by remember { mutableStateOf(false) }
+
+        // Groups' box variables
+        var selectedGroup: Group? by remember { mutableStateOf(null) }
+        var groupsBoxExpanded by remember { mutableStateOf(false) }
+
+        // Sessions' box variables
+        var selectedSession: Int? by remember { mutableStateOf(null) }
+        var sessionsBoxExpanded by remember { mutableStateOf(false) }
+
+        // Attendances' boxes variables
+        var selectedAttendanceValues: MutableList<String?> by remember { mutableStateOf(mutableListOf()) }
+        var attendanceValuesBoxExpanded: MutableList<Boolean> by remember { mutableStateOf(mutableListOf()) }
+
+        var success by remember { mutableStateOf(false) }
+        var isLoading by remember { mutableStateOf(false) }
+
+        var showDialog by remember { mutableStateOf(false) }
+        var dialogMessage by remember { mutableStateOf("") }
+
+
+
+        LaunchedEffect(isLoading) {
+            if (isLoading) {
+
+                try {
+
+
+
+
+
+                    withContext(Dispatchers.IO) {
+                        val database = app.getDatabase()
+
+                        selectedGroup.students.forEachIndexed { index, student ->
+
+                            database.insert(Schemas.Attendances) {
+                                set(it.tutorId, tutor!!.id)
+                                set(it.studentId, student.id)
+                                set(it.componentId, selectedComponent)
+                                set(it.value, selectedAttendanceValues[index])
+                                set(it.session, selectedSession)
+                            }
+
+                        }
+                    }
+
+
+
+                } catch (e: Exception) {
+                    Log.e("SUBMIT", "Error submitting file: ${e.message}")
+                    isLoading = false
+                }
+            }
+            if (success) {
+
+            }
+
+        }
+
+
 
         Scaffold(
-            topBar = { Header("Personal Overview", app) },
+            topBar = { Header("Request Reassessment", app) },
             bottomBar = { Footer(tutor!!.id) }
         ) { innerPadding ->
-            Box(
+
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
                     .padding(innerPadding)
                     .padding(16.dp)
             ) {
-                // Outer Box with horizontal scrolling
+
+                // Components' DropDownBox
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
+                        .clickable { componentsBoxExpanded = !componentsBoxExpanded }
+                        .border(1.dp, Color.Gray)
+                        .padding(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        // Row for the group name and student name
+                    Text(text = selectedComponent?.name ?: "Select a Component")
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp)
-                        ) {
-                            Text(
-                                text = "Group: ${student.group.name}",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.width(columnWidths[0])
-                            )
-                            Text(
-                                text = student.firstName + " " + student.lastName,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.width(columnWidths[1])
+                    DropdownMenu(
+                        expanded = componentsBoxExpanded,
+                        onDismissRequest = { componentsBoxExpanded = false },
+                    ) {
+                        components.forEach { component ->
+                            DropdownMenuItem(
+                                { Text(text = component.name) },
+                                onClick = {
+                                    selectedComponent = component
+                                    componentsBoxExpanded = false
+                                    selectedGroup = null
+                                }
                             )
                         }
-                        // LazyColumn for components and skills
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(components) { component ->
-                                val isExpanded = expandedComponents.value.contains(component.id)
-                                // Component row
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "Component: ${component.name}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        modifier = Modifier
-                                            .width(columnWidths[0])
-                                            .clickable {
-                                                expandedComponents.value = if (isExpanded) {
-                                                    expandedComponents.value - component.id
-                                                } else {
-                                                    expandedComponents.value + component.id
-                                                }
-                                            }
-                                    )
-                                    val score = component.scores.find { it.student.id == student.id }?.value ?: 0.0
-                                    Text(
-                                        text = "$score",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        modifier = Modifier.width(columnWidths[1])
-                                    )
-                                }
+                    }
+                }
 
-                                // Skill rows under each component
-                                if (isExpanded) {
-                                    component.skills.forEach { skill ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 2.dp, bottom = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = "Skill: ${skill.name}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier
-                                                    .width(columnWidths[0])
-                                                    .clickable {
-                                                        val intent = Intent(
-                                                            context,
-                                                            SkillActivity::class.java
-                                                        ).apply {
-                                                            putExtra("studentId", student.id)
-                                                            putExtra("skillId", skill.id)
-                                                        }
-                                                        context.startActivity(intent)
-                                                    }
-                                            )
-                                            val skillScore = skill.scores.find { it.student.id == student.id }?.value ?: 0.0
-                                            Text(
-                                                text = "$skillScore",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier.width(columnWidths[1])
-                                            )
-                                        }
+                // Groups' DropDownBox
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(selectedComponent != null) {
+                            groupsBoxExpanded = !groupsBoxExpanded
+                        }
+                        .border(
+                            1.dp,
+                            if (selectedComponent != null) Color.Gray else Color.LightGray
+                        )
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = selectedGroup?.name
+                            ?: if (selectedComponent == null) "Select a Component first" else "Select a Group"
+                    )
+
+                    DropdownMenu(
+                        expanded = groupsBoxExpanded,
+                        onDismissRequest = { groupsBoxExpanded = false }
+                    ) {
+                        selectedComponent?.groups?.forEach { group ->
+                            DropdownMenuItem(
+                                { Text(text = group.name) },
+                                onClick = {
+                                    selectedGroup = group
+                                    groupsBoxExpanded = false
+                                    selectedAttendanceValues = MutableList(group.students.size) {null as String}
+                                    attendanceValuesBoxExpanded = MutableList(group.students.size) {null as Boolean}
+                                }
+                            )
+                        }
+                    }
+                }
+
+
+                // Sessions' DropDownBox
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            Color.LightGray
+                        )
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = if (selectedSession != null) "Session: ${selectedSession.toString()}" else "Select a Group"
+                    )
+                    DropdownMenu(
+                        expanded = sessionsBoxExpanded,
+                        onDismissRequest = { sessionsBoxExpanded = false }
+                    ) {
+                        sessions.forEach { session ->
+                            DropdownMenuItem(
+                                { Text(text = "Session: ${session}") },
+                                onClick = {
+                                    selectedSession = session
+                                    sessionsBoxExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+
+                Spacer(modifier = Modifier.padding(bottom = 16.dp))
+
+
+                // Rows for each student and each attendance
+                if (selectedComponent != null &&
+                    selectedGroup != null &&
+                    selectedSession != null) {
+
+                    selectedGroup!!.students.forEachIndexed { index, student ->
+
+                        Row(
+
+                        ){
+
+                            Text( text = "${student.firstName} ${student.lastName}")
+
+                            Text( text = "Attendance:")
+
+                            // Attendance' DropDownBox
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { attendanceValuesBoxExpanded[index] = !attendanceValuesBoxExpanded[index] }
+                                    .border(1.dp, Color.Gray)
+                                    .padding(16.dp)
+                            ) {
+                                Text(text = selectedAttendanceValues[index] ?: "Select a Component")
+
+                                DropdownMenu(
+                                    expanded = attendanceValuesBoxExpanded[index],
+                                    onDismissRequest = { attendanceValuesBoxExpanded[index] = false },
+                                ) {
+                                    attendanceValues.forEach { value ->
+                                        DropdownMenuItem(
+                                            { Text(text = value) },
+                                            onClick = {
+                                                selectedAttendanceValues[index] = value
+                                                attendanceValuesBoxExpanded[index] = false
+                                            }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                // Show Dialog if needed
+                if (showDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDialog = false },
+                        title = { Text("Submission Status") },
+                        text = { Text(dialogMessage) },
+                        confirmButton = {
+                            Button(
+                                onClick = { showDialog = false }
+                            ) {
+                                Text("Ok")
+                            }
+                        }
+                    )
+                }
+
+
+
+
             }
         }
     }

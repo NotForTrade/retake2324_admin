@@ -22,20 +22,14 @@ interface Announcement : Entity<Announcement> {
     var datetime: String
 }
 
-interface AttendanceState : Entity<AttendanceState> {
-    companion object : Entity.Factory<AttendanceState>()
-    var id:  Int
-    var value: String
-}
-
 interface Attendance : Entity<Attendance> {
     companion object : Entity.Factory<Attendance>()
     var id:  Int
     var tutor: User
     var student: User
     var component: Component
-    var status: AttendanceState
-    var session: Int
+    var value: String
+    var session: String
 }
 
 interface Component : Entity<Component> {
@@ -145,14 +139,14 @@ object Schemas {
         val datetime = varchar("datetime").bindTo { it.datetime }
     }
 
-    object AttendanceStates : Table<AttendanceState>("attendance_status") {
-        val id = int("id").primaryKey().bindTo { it.id}
-        val value = varchar("value").bindTo { it.value }
-    }
 
     object Attendances : Table<Attendance>("attendance") {
         val id = int("id").primaryKey().bindTo { it.id}
+        val tutorId = int("tutor_id").references(Users) { it.tutor }
+        val studentId = int("student_id").references(Users) { it.student }
         val componentId = int("component_id").references(Components) { it.component }
+        val value = varchar("value").bindTo { it.value }
+        val session = varchar("session").bindTo { it.session }
     }
 
     object Roles : Table<Role>("role") {
