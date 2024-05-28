@@ -52,10 +52,12 @@ import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
 import org.ktorm.dsl.insert
+import org.ktorm.entity.add
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
 import org.ktorm.entity.sequenceOf
+import org.ktorm.entity.update
 
 
 class ProvideAttendanceActivity : ComponentActivity() {
@@ -76,17 +78,16 @@ class ProvideAttendanceActivity : ComponentActivity() {
     }
 
 
+
     private suspend fun fetchObjects(
         database: Database,
         tutorId: Int
     ): Triple<User?, List<Component>, List<Attendance>> {
 
         try {
-
             val tutor = withContext(Dispatchers.IO) {
                 database.sequenceOf(Schemas.Users).find { it.id eq tutorId }
             }
-
             if (tutor == null) {
                 Log.e("TUTOR NOT FOUND", "TUTOR NOT FOUND IN DATABASE!")
                 return Triple(null, emptyList(), emptyList())
@@ -94,7 +95,6 @@ class ProvideAttendanceActivity : ComponentActivity() {
                 Log.e("STUDENT FOUND", "A STUDENT IS MATCHING THE ID")
                 return Triple(tutor, emptyList(), emptyList())
             } else {
-
                 val componentGroupPairs: List<TutorMapping>
                 if (tutor.role.name == "Tutor") {
                     // Fetch all the students from the user's group
@@ -202,10 +202,14 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
         if (isLoading) {
             Text(text = "Loading...", modifier = Modifier.padding(16.dp))
+        } else if (tutor?.role?.name == "Student") {
+            Text(text = "The id matches a student role. Only an administration member can access this page!")
         } else {
             ProvideAttendanceScreen(app, tutor, components, attendances)
         }
     }
+
+    fun Database.attendances() = this.sequenceOf(Schemas.Attendances)
 
     @Composable
     fun ProvideAttendanceScreen(
@@ -238,7 +242,6 @@ class ProvideAttendanceActivity : ComponentActivity() {
         var selectedAttendanceValues: MutableList<String?> by remember { mutableStateOf(mutableListOf()) }
         var attendanceValuesBoxExpanded: MutableList<Boolean> by remember { mutableStateOf(mutableListOf()) }
 
-        var success by remember { mutableStateOf(false) }
         var isLoading by remember { mutableStateOf(false) }
 
         var showDialog by remember { mutableStateOf(false) }
@@ -251,35 +254,62 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
                 try {
 
-
-
-
-
                     withContext(Dispatchers.IO) {
                         val database = app.getDatabase()
 
-                        selectedGroup.students.forEachIndexed { index, student ->
+                        selectedGroup!!.students.forEachIndexed { index, student ->
 
+                            if (selectedAttendanceValues[index] != null) { // Don't override attendance objects that the user don't want to update
+
+                                // Check if an attendance already exists for the triple<student, component, session>
+                                val existingAttendance = attendances
+                                    .filter { it.student == student }
+                                    .filter { it.component == selectedComponent }
+                                    .find { it.session == selectedSession }
+
+                                if (existingAttendance != null) {
+                                    existingAttendance.value = selectedAttendanceValues[index]!!
+                                    existingAttendance.tutor = tutor!!
+                                    database.attendances().update(existingAttendance)
+                                } else {
+                                    val newAttendance = Attendance {
+                                        this.tutor = tutor!!
+                                        this.student = student
+                                        this.component = selectedComponent!!
+                                        this.value = selectedAttendanceValues[index]!!
+                                        this.session = selectedSession!!
+                                    }
+                                    database.attendances().add(newAttendance)
+                                }
+                            }
+
+
+
+                            /*
                             database.insert(Schemas.Attendances) {
                                 set(it.tutorId, tutor!!.id)
                                 set(it.studentId, student.id)
-                                set(it.componentId, selectedComponent)
+                                set(it.componentId, selectedComponent.id)
                                 set(it.value, selectedAttendanceValues[index])
                                 set(it.session, selectedSession)
                             }
+                            */
+
+
+
 
                         }
                     }
 
-
+                    dialogMessage = "Attendances updated!"
+                    showDialog = true
 
                 } catch (e: Exception) {
-                    Log.e("SUBMIT", "Error submitting file: ${e.message}")
+                    Log.e("UPDATE VALUES", "Error: ${e.message}")
                     isLoading = false
+                    dialogMessage = "An error occurred: ${e.message}"
+                    showDialog = true
                 }
-            }
-            if (success) {
-
             }
 
         }

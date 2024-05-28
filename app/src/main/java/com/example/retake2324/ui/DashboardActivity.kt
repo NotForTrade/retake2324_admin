@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.retake2324.core.App
 
@@ -32,16 +33,18 @@ class DashboardActivity : ComponentActivity() {
         val app = application as App
 
         setContent {
-            val studentId = intent.getIntExtra("studentId", -1)
-            DashboardScreen(app, studentId)
+            val tutorId = intent.getIntExtra("studentId", 12)
+            DashboardScreen(app, tutorId)
         }
     }
 
     @Composable
-    fun DashboardScreen(app: App, studentId: Int) {
+    fun DashboardScreen(app: App, tutorId: Int) {
+        val context = LocalContext.current
+
         Scaffold(
             topBar = { Header("Dashboard", app) },
-            bottomBar = { Footer(studentId) }
+            bottomBar = { Footer(tutorId) }
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -53,11 +56,11 @@ class DashboardActivity : ComponentActivity() {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     // View Announcements Button
 
-                    /*
+
                     Button(
                         onClick = {
-                            val intent = Intent(this@DashboardActivity, AnnouncementsActivity::class.java)
-                            intent.putExtra("studentId", studentId)
+                            val intent = Intent(context, ProvideAttendanceActivity::class.java)
+                            intent.putExtra("tutorId", tutorId)
                             startActivity(intent)
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -67,6 +70,8 @@ class DashboardActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+
+/*
                     // Frame for personal and group buttons
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.weight(1f)) {

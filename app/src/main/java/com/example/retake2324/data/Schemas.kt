@@ -29,7 +29,7 @@ interface Attendance : Entity<Attendance> {
     var student: User
     var component: Component
     var value: String
-    var session: String
+    var session: Int
 }
 
 interface Component : Entity<Component> {
@@ -146,7 +146,7 @@ object Schemas {
         val studentId = int("student_id").references(Users) { it.student }
         val componentId = int("component_id").references(Components) { it.component }
         val value = varchar("value").bindTo { it.value }
-        val session = varchar("session").bindTo { it.session }
+        val session = int("session").bindTo { it.session }
     }
 
     object Roles : Table<Role>("role") {

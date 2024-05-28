@@ -1,5 +1,6 @@
 package com.example.retake2324.data
 
+import android.util.Log
 import org.ktorm.database.Database
 import org.ktorm.logging.ConsoleLogger
 import org.ktorm.logging.LogLevel
@@ -17,6 +18,7 @@ const val SQL_user = "root"
 const val SQL_passwd = "root"
 
 fun connectDatabase(): Database {
+    Log.d("connectDatabase", "Starting database connection")
     return Database.connect(
         SQL_url,
         driver = SQL_driver,
