@@ -110,7 +110,6 @@ class ProvideAttendanceActivity : ComponentActivity() {
                 }
 
                 if (componentGroupPairs.isNotEmpty()) {
-
                     val components = withContext(Dispatchers.IO) {
                         database.sequenceOf(Schemas.Components).toList()
                     }

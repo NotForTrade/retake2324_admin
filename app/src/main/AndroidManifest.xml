@@ -31,6 +31,12 @@
         <activity
             android:name=".ui.ProvideAttendanceActivity"
             android:exported="false"/>
+        <activity
+            android:name=".ui.ConsultNotesActivity"
+            android:exported="false"/>
+        <activity
+            android:name=".ui.SkillActivity"
+            android:exported="false"/>
     </application>
 
 </manifest>

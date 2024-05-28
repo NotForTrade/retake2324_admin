@@ -96,6 +96,7 @@ interface Skill : Entity<Skill> {
     var description: String
     var coefficient: Int
     var scores: List<Score>
+    var groupObservations: List<GroupObservation>
 }
 
 interface GroupObservation : Entity<GroupObservation> {
