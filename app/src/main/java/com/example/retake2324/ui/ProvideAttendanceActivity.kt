@@ -94,7 +94,7 @@ class ProvideAttendanceActivity : ComponentActivity() {
             } else if (tutor.role.name == "Student") {
                 Log.e("STUDENT FOUND", "A STUDENT IS MATCHING THE ID")
                 return Triple(tutor, emptyList(), emptyList())
-            } else {
+            } else { // Tutor role is valid
                 val componentGroupPairs: List<TutorMapping>
                 if (tutor.role.name == "Tutor") {
                     // Fetch all the students from the user's group
@@ -108,69 +108,72 @@ class ProvideAttendanceActivity : ComponentActivity() {
                     }
                 }
 
-                val components = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Components).toList()
-                }
-                // Fetch the student role object
-                val studentRole = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Roles).find { it.name eq "Student" }
-                }
-                // Fetch the list of students
-                val students = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Users).filter { it.roleId eq studentRole!!.id }
-                        .toList()
-                }
-                val groups = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Groups).toList()
-                }
-                val attendances = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Attendances).toList()
-                }
+                if (componentGroupPairs.isNotEmpty()) {
 
-
-                if (components.isNotEmpty()) {
-
-                    // Collect all the components the tutor is assigned to
-                    val assignedComponents: MutableList<Component> = mutableListOf(Component())
-                    componentGroupPairs.forEach { pair ->
-                        components.find { it.name == pair.component.name }
-                            ?.let { assignedComponents.add(it) }
+                    val components = withContext(Dispatchers.IO) {
+                        database.sequenceOf(Schemas.Components).toList()
+                    }
+                    // Fetch the student role object
+                    val studentRole = withContext(Dispatchers.IO) {
+                        database.sequenceOf(Schemas.Roles).find { it.name eq "Student" }
+                    }
+                    // Fetch the list of students
+                    val students = withContext(Dispatchers.IO) {
+                        database.sequenceOf(Schemas.Users).filter { it.roleId eq studentRole!!.id }
+                            .toList()
+                    }
+                    val groups = withContext(Dispatchers.IO) {
+                        database.sequenceOf(Schemas.Groups).toList()
+                    }
+                    val attendances = withContext(Dispatchers.IO) {
+                        database.sequenceOf(Schemas.Attendances).toList()
                     }
 
-                    if (assignedComponents.isNotEmpty()) {
 
-                        // Attribute all the students to their group
-                        groups.forEach { group ->
-                            group.students = students.filter { it.group.id == group.id }
+                    if (components.isNotEmpty()) {
+
+                        // Collect all the components the tutor is assigned to
+                        val assignedComponents: MutableList<Component> = mutableListOf(Component())
+                        componentGroupPairs.forEach { pair ->
+                            components.find { it.name == pair.component.name }
+                                ?.let { assignedComponents.add(it) }
                         }
 
-                        // Attribute all the groups to the components
+                        if (assignedComponents.isNotEmpty()) {
 
-                        assignedComponents.forEach { assignedComponent ->
-                            val assignedGroupToAssignedComponent: MutableList<Group> =
-                                mutableListOf(Group())
-                            componentGroupPairs.forEach { pair ->
-                                if (pair.component.id == assignedComponent.id) {
-                                    assignedGroupToAssignedComponent.add(pair.group)
-                                }
+                            // Attribute all the students to their group
+                            groups.forEach { group ->
+                                group.students = students.filter { it.group.id == group.id }
                             }
-                            assignedComponent.groups = assignedGroupToAssignedComponent
+
+                            // Attribute all the groups to the components
+
+                            assignedComponents.forEach { assignedComponent ->
+                                val assignedGroupToAssignedComponent: MutableList<Group> =
+                                    mutableListOf(Group())
+                                componentGroupPairs.forEach { pair ->
+                                    if (pair.component.id == assignedComponent.id) {
+                                        assignedGroupToAssignedComponent.add(pair.group)
+                                    }
+                                }
+                                assignedComponent.groups = assignedGroupToAssignedComponent
+                            }
+                            return Triple(tutor, assignedComponents, attendances)
+
+                        } else {
+                            Log.e("NO ASSIGNED COMPONENT", "TUTOR MANAGES NO COMPONENT")
+                            return Triple(tutor, emptyList(), emptyList())
                         }
-                        return Triple(tutor, assignedComponents, attendances)
 
                     } else {
-                        Log.i("NO ASSIGNED COMPONENT", "TUTOR MANAGES NO COMPONENT")
+                        Log.e("NO COMPONENT", "NO COMPONENT FOUND IN DATABASE!")
                         return Triple(tutor, emptyList(), emptyList())
                     }
-
-                } else {
-                    Log.e("NO COMPONENT", "NO COMPONENT FOUND IN DATABASE!")
-                    return Triple(tutor, emptyList(), emptyList())
+                } else { // tutor_mapping is empty
+                    Log.e("NO MAPPING", "NO TUTOR MAPPING ENTRY")
+                    return Triple(null, emptyList(), emptyList())
                 }
-
             }
-
-
         } catch (e: Exception) {
             Log.e("SQL FETCHING ERROR", e.toString())
             return Triple(null, emptyList(), emptyList())
@@ -202,19 +205,21 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
         if (isLoading) {
             Text(text = "Loading...", modifier = Modifier.padding(16.dp))
-        } else if (tutor?.role?.name == "Student") {
+        } else if (tutor == null) {
+            Text(text = "Either an error occurred while fetching the database, or an imperative entry is missing from the database")
+        } else if (tutor!!.role.name == "Student") {
             Text(text = "The id matches a student role. Only an administration member can access this page!")
         } else {
-            ProvideAttendanceScreen(app, tutor, components, attendances)
+            ProvideAttendanceScreen(app, tutor!!, components, attendances)
         }
     }
 
-    fun Database.attendances() = this.sequenceOf(Schemas.Attendances)
+    private fun Database.attendances() = this.sequenceOf(Schemas.Attendances)
 
     @Composable
     fun ProvideAttendanceScreen(
         app: App,
-        tutor: User?,
+        tutor: User,
         components: List<Component>,
         attendances: List<Attendance>
     ) {
@@ -348,6 +353,14 @@ class ProvideAttendanceActivity : ComponentActivity() {
                                     selectedComponent = component
                                     componentsBoxExpanded = false
                                     selectedGroup = null
+
+
+                                    Log.d("COMPONENTS", components.toString())
+                                    Log.d("TUTOR", tutor.toString())
+                                    Log.d("ATTENDANCES", attendances.toString())
+
+
+
                                 }
                             )
                         }
