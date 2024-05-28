@@ -65,7 +65,7 @@ class DashboardActivity : ComponentActivity() {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("View Announcements")
+                        Text("Provide Attendance")
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

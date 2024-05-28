@@ -57,6 +57,7 @@ import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
 import org.ktorm.entity.sequenceOf
+import org.ktorm.entity.toMutableList
 import org.ktorm.entity.update
 
 
@@ -133,26 +134,25 @@ class ProvideAttendanceActivity : ComponentActivity() {
                     if (components.isNotEmpty()) {
 
                         // Collect all the components the tutor is assigned to
-                        val assignedComponents: MutableList<Component> = mutableListOf(Component())
+                        val assignedComponents: MutableList<Component> = mutableListOf()
                         componentGroupPairs.forEach { pair ->
-                            components.find { it.name == pair.component.name }
-                                ?.let { assignedComponents.add(it) }
+                            // Avoid retrieving duplicates
+                            if (assignedComponents.find { it.id == pair.component.id} == null ) {
+                                components.find { it.name == pair.component.name }
+                                    ?.let { assignedComponents.add(it) }
+                            }
                         }
-
                         if (assignedComponents.isNotEmpty()) {
 
-                            // Attribute all the students to their group
-                            groups.forEach { group ->
-                                group.students = students.filter { it.group.id == group.id }
-                            }
-
                             // Attribute all the groups to the components
-
                             assignedComponents.forEach { assignedComponent ->
-                                val assignedGroupToAssignedComponent: MutableList<Group> =
-                                    mutableListOf(Group())
+                                val assignedGroupToAssignedComponent: MutableList<Group> = mutableListOf()
                                 componentGroupPairs.forEach { pair ->
-                                    if (pair.component.id == assignedComponent.id) {
+                                    // Avoid duplicate groups if there are duplicate entries in the database
+                                    if ((assignedGroupToAssignedComponent.find { it.id == pair.group.id } == null) and (pair.component.id == assignedComponent.id)) {
+                                        // Assign the student list to the the group
+                                        pair.group.students = students.filter {it.group.id == pair.group.id}
+                                        // add the group to the mutable list
                                         assignedGroupToAssignedComponent.add(pair.group)
                                     }
                                 }
@@ -221,15 +221,18 @@ class ProvideAttendanceActivity : ComponentActivity() {
         app: App,
         tutor: User,
         components: List<Component>,
-        attendances: List<Attendance>
+        initialAttendances: List<Attendance>
     ) {
         val context = LocalContext.current
 
         // Number of sessions per component
         val sessions = 1..8
 
+        // Mutable attendance list
+        var attendances by remember { mutableStateOf(initialAttendances.toList()) }
+
         // Attendances values
-        val attendanceValues = listOf("Present", "Absent without proof", "Absent with proof", "Late")
+        val attendanceValues = listOf("Present", "Absent without proof", "Absent with proof", "Late", "-")
 
         // Components' box variables
         var selectedComponent: Component? by remember { mutableStateOf(null) }
@@ -247,6 +250,9 @@ class ProvideAttendanceActivity : ComponentActivity() {
         var selectedAttendanceValues: MutableList<String?> by remember { mutableStateOf(mutableListOf()) }
         var attendanceValuesBoxExpanded: MutableList<Boolean> by remember { mutableStateOf(mutableListOf()) }
 
+        // Boolean to not constantly overwrite the selected attendance values
+        var setCurrentAttendances  by remember { mutableStateOf(false) }
+
         var isLoading by remember { mutableStateOf(false) }
 
         var showDialog by remember { mutableStateOf(false) }
@@ -261,6 +267,7 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
                     withContext(Dispatchers.IO) {
                         val database = app.getDatabase()
+                        attendances = database.sequenceOf(Schemas.Attendances).toList()
 
                         selectedGroup!!.students.forEachIndexed { index, student ->
 
@@ -268,17 +275,17 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
                                 // Check if an attendance already exists for the triple<student, component, session>
                                 val existingAttendance = attendances
-                                    .filter { it.student == student }
-                                    .filter { it.component == selectedComponent }
+                                    .filter { it.student.id == student.id }
+                                    .filter { it.component.id == selectedComponent!!.id }
                                     .find { it.session == selectedSession }
 
                                 if (existingAttendance != null) {
                                     existingAttendance.value = selectedAttendanceValues[index]!!
-                                    existingAttendance.tutor = tutor!!
+                                    existingAttendance.tutor = tutor
                                     database.attendances().update(existingAttendance)
                                 } else {
                                     val newAttendance = Attendance {
-                                        this.tutor = tutor!!
+                                        this.tutor = tutor
                                         this.student = student
                                         this.component = selectedComponent!!
                                         this.value = selectedAttendanceValues[index]!!
@@ -287,27 +294,12 @@ class ProvideAttendanceActivity : ComponentActivity() {
                                     database.attendances().add(newAttendance)
                                 }
                             }
-
-
-
-                            /*
-                            database.insert(Schemas.Attendances) {
-                                set(it.tutorId, tutor!!.id)
-                                set(it.studentId, student.id)
-                                set(it.componentId, selectedComponent.id)
-                                set(it.value, selectedAttendanceValues[index])
-                                set(it.session, selectedSession)
-                            }
-                            */
-
-
-
-
                         }
                     }
 
                     dialogMessage = "Attendances updated!"
                     showDialog = true
+                    isLoading = false
 
                 } catch (e: Exception) {
                     Log.e("UPDATE VALUES", "Error: ${e.message}")
@@ -322,8 +314,8 @@ class ProvideAttendanceActivity : ComponentActivity() {
 
 
         Scaffold(
-            topBar = { Header("Request Reassessment", app) },
-            bottomBar = { Footer(tutor!!.id) }
+            topBar = { Header("Provide Attendance", app) },
+            bottomBar = { Footer(tutor.id) }
         ) { innerPadding ->
 
             Column(
@@ -353,13 +345,8 @@ class ProvideAttendanceActivity : ComponentActivity() {
                                     selectedComponent = component
                                     componentsBoxExpanded = false
                                     selectedGroup = null
-
-
-                                    Log.d("COMPONENTS", components.toString())
-                                    Log.d("TUTOR", tutor.toString())
-                                    Log.d("ATTENDANCES", attendances.toString())
-
-
+                                    selectedAttendanceValues.clear()
+                                    attendanceValuesBoxExpanded.clear()
 
                                 }
                             )
@@ -389,14 +376,15 @@ class ProvideAttendanceActivity : ComponentActivity() {
                         expanded = groupsBoxExpanded,
                         onDismissRequest = { groupsBoxExpanded = false }
                     ) {
-                        selectedComponent?.groups?.forEach { group ->
+                        selectedComponent!!.groups?.forEach { group ->
                             DropdownMenuItem(
                                 { Text(text = group.name) },
                                 onClick = {
                                     selectedGroup = group
                                     groupsBoxExpanded = false
-                                    selectedAttendanceValues = MutableList(group.students.size) {null as String}
-                                    attendanceValuesBoxExpanded = MutableList(group.students.size) {null as Boolean}
+                                    selectedAttendanceValues = MutableList(group.students.size) {null}
+                                    attendanceValuesBoxExpanded = MutableList(group.students.size) {false}
+                                    setCurrentAttendances = true
                                 }
                             )
                         }
@@ -408,6 +396,7 @@ class ProvideAttendanceActivity : ComponentActivity() {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { sessionsBoxExpanded = !sessionsBoxExpanded }
                         .border(
                             1.dp,
                             Color.LightGray
@@ -415,7 +404,7 @@ class ProvideAttendanceActivity : ComponentActivity() {
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = if (selectedSession != null) "Session: ${selectedSession.toString()}" else "Select a Group"
+                        text = if (selectedSession != null) "Session: ${selectedSession.toString()}" else "Select a Session"
                     )
                     DropdownMenu(
                         expanded = sessionsBoxExpanded,
@@ -423,7 +412,7 @@ class ProvideAttendanceActivity : ComponentActivity() {
                     ) {
                         sessions.forEach { session ->
                             DropdownMenuItem(
-                                { Text(text = "Session: ${session}") },
+                                { Text(text = "Session: $session") },
                                 onClick = {
                                     selectedSession = session
                                     sessionsBoxExpanded = false
@@ -433,49 +422,88 @@ class ProvideAttendanceActivity : ComponentActivity() {
                     }
                 }
 
-
                 Spacer(modifier = Modifier.padding(bottom = 16.dp))
 
+                Box {
+                    // Rows for each student and each attendance
+                    if ((selectedComponent != null) &&
+                        (selectedGroup != null) &&
+                        (selectedSession != null)
+                    ) {
 
-                // Rows for each student and each attendance
-                if (selectedComponent != null &&
-                    selectedGroup != null &&
-                    selectedSession != null) {
+                        // Display the current attendance values matching the component, the session and each student from the group
+                        if (attendances.isNotEmpty() and setCurrentAttendances){
+                            selectedGroup!!.students.forEachIndexed { index, student ->
+                                val currentAttendance = attendances
+                                    .filter { it.student.id == student.id }
+                                    .filter { it.component.id == selectedComponent!!.id }
+                                    .find { it.session == selectedSession }
+                                if (currentAttendance != null) {
+                                    selectedAttendanceValues[index] = currentAttendance.value
+                                }
+                            }
+                            setCurrentAttendances = false
+                        }
 
-                    selectedGroup!!.students.forEachIndexed { index, student ->
+                        Column {
 
-                        Row(
+                            selectedGroup!!.students.forEachIndexed { index, student ->
 
-                        ){
+                                Row {
 
-                            Text( text = "${student.firstName} ${student.lastName}")
+                                    Text(text = "${student.firstName} ${student.lastName}")
 
-                            Text( text = "Attendance:")
+                                    Text(text = "Attendance:")
 
-                            // Attendance' DropDownBox
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { attendanceValuesBoxExpanded[index] = !attendanceValuesBoxExpanded[index] }
-                                    .border(1.dp, Color.Gray)
-                                    .padding(16.dp)
-                            ) {
-                                Text(text = selectedAttendanceValues[index] ?: "Select a Component")
-
-                                DropdownMenu(
-                                    expanded = attendanceValuesBoxExpanded[index],
-                                    onDismissRequest = { attendanceValuesBoxExpanded[index] = false },
-                                ) {
-                                    attendanceValues.forEach { value ->
-                                        DropdownMenuItem(
-                                            { Text(text = value) },
-                                            onClick = {
-                                                selectedAttendanceValues[index] = value
-                                                attendanceValuesBoxExpanded[index] = false
+                                    // Attendance' DropDownBox
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                attendanceValuesBoxExpanded =
+                                                    attendanceValuesBoxExpanded.toMutableList().apply {
+                                                        this[index] = !this[index]
+                                                    }
                                             }
+                                            .border(1.dp, Color.Gray)
+                                            .padding(16.dp)
+                                    ) {
+                                        Text(
+                                            text = selectedAttendanceValues[index]
+                                                ?: "No attendance value provided"
                                         )
+
+                                        DropdownMenu(
+                                            expanded = attendanceValuesBoxExpanded[index],
+                                            onDismissRequest = {
+                                                attendanceValuesBoxExpanded =
+                                                    attendanceValuesBoxExpanded.toMutableList().apply {
+                                                        this[index] = false
+                                                    }
+                                            },
+                                        ) {
+                                            attendanceValues.forEach { value ->
+                                                DropdownMenuItem(
+                                                    { Text(text = value) },
+                                                    onClick = {
+                                                        selectedAttendanceValues[index] = value
+                                                        attendanceValuesBoxExpanded =
+                                                            attendanceValuesBoxExpanded.toMutableList().apply {
+                                                                this[index] = false
+                                                            }
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
+                            }
+
+                            Button(
+                                onClick = { isLoading = true },
+                                modifier = Modifier.padding(top = 16.dp)
+                            ) {
+                                Text("Submit attendances")
                             }
                         }
                     }
