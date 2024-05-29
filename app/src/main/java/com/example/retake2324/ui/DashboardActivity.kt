@@ -78,7 +78,7 @@ class DashboardActivity : ComponentActivity() {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("ConsultNotes")
+                        Text("Components Overview")
                     }
 
 

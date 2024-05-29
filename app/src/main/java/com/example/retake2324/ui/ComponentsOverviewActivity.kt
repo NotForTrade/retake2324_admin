@@ -1,5 +1,6 @@
 package com.example.retake2324.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -199,7 +200,7 @@ class ComponentsOverviewActivity : ComponentActivity() {
 
 
         Scaffold(
-            topBar = { Header("Group Overview", app) },
+            topBar = { Header("Components Overview", app) },
             bottomBar = { Footer(tutor.id) }
         ) { innerPadding ->
             Box (
@@ -282,8 +283,11 @@ class ComponentsOverviewActivity : ComponentActivity() {
                                                     ) {
                                                         DropdownMenuItem(
                                                             onClick = {
-                                                                // todo navigateToGroupOverview(context, tutorId, group.name)
                                                                 expanded = false
+                                                                val intent = Intent(context, GroupOverviewActivity::class.java)
+                                                                intent.putExtra("tutorId", tutor.id)
+                                                                intent.putExtra("groupId", group.id)
+                                                                startActivity(intent)
                                                             },
                                                             text = { Text("View Group Overview") }
                                                         )

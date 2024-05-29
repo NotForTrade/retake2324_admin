@@ -32,7 +32,10 @@
             android:name=".ui.ProvideAttendanceActivity"
             android:exported="false"/>
         <activity
-            android:name=".ui.ConsultNotesActivity"
+            android:name=".ui.ComponentsOverviewActivity"
+            android:exported="false"/>
+        <activity
+            android:name=".ui.GroupOverviewActivity"
             android:exported="false"/>
         <activity
             android:name=".ui.SkillActivity"
