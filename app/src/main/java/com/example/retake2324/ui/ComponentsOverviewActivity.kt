@@ -113,21 +113,6 @@ class ComponentsOverviewActivity : ComponentActivity() {
                         database.sequenceOf(Schemas.Users).filter { it.roleId eq studentRole!!.id }
                             .toList()
                     }
-                    val groups = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Groups).toList()
-                    }
-                    val attendances = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Attendances).toList()
-                    }
-                    val skills = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Skills).toList()
-                    }
-                    val scores = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Scores).toList()
-                    }
-                    val groupObservations = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.GroupObservations).toList()
-                    }
                     if (components.isNotEmpty()) {
 
                         // Collect all the components the tutor is assigned to
@@ -156,18 +141,6 @@ class ComponentsOverviewActivity : ComponentActivity() {
                                     }
                                 }
                                 assignedComponent.groups = assignedGroupToAssignedComponent
-
-                                // Assign the skills to the components
-                                assignedComponent.skills =
-                                    skills.filter { it.component.id == assignedComponent.id }
-                                        .toList()
-
-                                // Assign the scores and the group observations to each skill
-                                assignedComponent.skills.forEach { skill ->
-                                    skill.scores = scores.filter { it.skill.id == skill.id }
-                                    skill.groupObservations =
-                                        groupObservations.filter { it.skill.id == skill.id }
-                                }
                             }
                             return Pair(tutor, assignedComponents)
                         } else {
