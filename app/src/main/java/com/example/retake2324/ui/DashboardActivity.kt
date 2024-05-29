@@ -70,6 +70,18 @@ class DashboardActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, ComponentsOverviewActivity::class.java)
+                            intent.putExtra("tutorId", tutorId)
+                            startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("ConsultNotes")
+                    }
+
+
 
 /*
                     // Frame for personal and group buttons
