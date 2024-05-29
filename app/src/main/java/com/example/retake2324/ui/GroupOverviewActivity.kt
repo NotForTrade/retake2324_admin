@@ -17,17 +17,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.example.retake2324.core.App
 import com.example.retake2324.data.Component
@@ -38,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
+import org.ktorm.entity.add
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
@@ -127,9 +134,9 @@ class GroupOverviewActivity : ComponentActivity() {
                 return Triple(tutor, emptyList(), emptyList())
             }
 
-            // Fetch the score list
+            // Fetch the score list -- ignore these for history
             val scores = withContext(Dispatchers.IO) {
-                database.sequenceOf(Schemas.Scores).toList()
+                database.sequenceOf(Schemas.Scores).filter { it.active eq true }.toList()
             }
 
             // Set-up the studentComponentScore mutable list to build the list of students' score per component
@@ -153,8 +160,10 @@ class GroupOverviewActivity : ComponentActivity() {
                                 var weightedScoreSum = 0.0
                                 var coefficientSum = 0.0
                                 studentScores.forEach { studentScore ->
-                                    weightedScoreSum += studentScore.value * studentScore.skill.coefficient
-                                    coefficientSum += studentScore.skill.coefficient
+                                    if (studentScore.value != null) {
+                                        weightedScoreSum += studentScore.value!! * studentScore.skill.coefficient
+                                        coefficientSum += studentScore.skill.coefficient
+                                    }
                                 }
                                 // Create and add a new Score object with the weighted average score for the component
                                 studentComponentScore.add(Score {
@@ -175,6 +184,42 @@ class GroupOverviewActivity : ComponentActivity() {
                     }
                 }
             }
+
+            // Create empty score when entries are missing
+            components.forEach {component ->
+                component.skills.forEach {skill ->
+                    students.forEach {student ->
+                        var score = scores.filter { it.skill.id == skill.id }.find { it.student.id == student.id }
+                        if (score == null) {
+                            score = Score {
+                                this.student = student
+                                this.skill = skill
+                                this.value = null
+                                this.observation = null
+                                this.active = true
+                            }
+                            withContext(Dispatchers.IO) {
+                                database.sequenceOf(Schemas.Scores).add(score)
+                            }
+                            Log.d("EMPTY SCORE ADDED", score.toString())
+
+                            // get the score from the database
+                            val newScore = withContext(Dispatchers.IO) {
+                                database.sequenceOf(Schemas.Scores)
+                                    .filter { it.studentId eq score.student.id }
+                                    .filter { it.skillId eq score.skill.id }
+                                    .find { it.active eq true }
+                            }
+
+                            // Update the score list
+                            val newList = components.find { it.id == score.skill.component.id }!!.skills.find {it.id == score.skill.id}!!.scores.toMutableList()
+                            newList.add(newScore!!)
+                            components.find { it.id == score.skill.component.id }!!.skills.find {it.id == score.skill.id}!!.scores = newList
+                        }
+                    }
+                }
+            }
+
 
             Log.d("FETCH SUCCESS", "########################## SUCCESS ##########################")
             Log.d("TUTOR", tutor.toString())
@@ -211,7 +256,7 @@ class GroupOverviewActivity : ComponentActivity() {
         if (isLoading) {
             Text(text = "Loading...", modifier = Modifier.padding(16.dp))
         } else if (tutor == null) {
-            Text(text = "User not found in database!", modifier = Modifier.padding(16.dp))
+            Text(text = "An error occurred while retrieving data on the database!", modifier = Modifier.padding(16.dp))
         } else if (tutor!!.role.name == "Student") {
             Text(text = "The user matches a student, not an administration member!", modifier = Modifier.padding(16.dp))
         } else {
@@ -224,10 +269,25 @@ class GroupOverviewActivity : ComponentActivity() {
         val context = LocalContext.current
         val expandedComponents = remember { mutableStateOf(components.map { it.id }.toSet()) }
 
+        val scoreList = listOf(null, 0, 7, 10, 13, 16, 20)
+
+        var updateComponentScores by remember { mutableStateOf(false) }
+
+        val initialScores = remember { mutableStateListOf<Score>() }
+        val scoreUpdates = remember { mutableStateListOf<Score>() }
+
         val columnWidths = listOf(200.dp) + List(students.size) { 100.dp }
 
+
+
+
+        LaunchedEffect(Unit) {
+
+        }
+
+
         Scaffold(
-            topBar = { Header("${students[0].group.name} Overview", app) },
+            topBar = { Header("${students[0].group?.name} Overview", app) },
             bottomBar = { Footer(tutor.id) }
         ) { innerPadding ->
             Box(
@@ -253,7 +313,7 @@ class GroupOverviewActivity : ComponentActivity() {
                                     .padding(bottom = 8.dp)
                             ) {
                                 Text(
-                                    text = "Group: ${students[0].group.name}",
+                                    text = "Group: ${students[0].group?.name}",
                                     style = MaterialTheme.typography.titleMedium,
                                     modifier = Modifier.width(columnWidths[0])
                                 )
@@ -326,13 +386,62 @@ class GroupOverviewActivity : ComponentActivity() {
                                                         context.startActivity(intent)
                                                     }
                                             )
+
                                             students.forEachIndexed { index, student ->
-                                                val skillScore = skill.scores.find { it.student.id == student.id }?.value ?: 0.0
-                                                Text(
-                                                    text = "$skillScore",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    modifier = Modifier.width(columnWidths[index + 1])
-                                                )
+                                                val score = skill.scores.find { it.student.id == student.id }
+                                                var expanded by remember { mutableStateOf(false) }
+
+                                                Box {
+                                                    Text(
+                                                        text = "${score?.value ?: "-"}",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        modifier = Modifier
+                                                            .width(columnWidths[index + 1])
+                                                            .clickable { expanded = true }
+                                                    )
+
+                                                    DropdownMenu(
+                                                        expanded = expanded,
+                                                        onDismissRequest = { expanded = false },
+                                                        modifier = Modifier.width(columnWidths[index + 1])
+                                                    ) {
+                                                        scoreList.forEach { value ->
+                                                            DropdownMenuItem(
+                                                                text = { Text(value?.toString() ?: "-") },
+                                                                onClick = {
+
+                                                                    val newScore = score!!.copy()
+                                                                    newScore.value = value?.toDouble()
+
+                                                                    // Check if the score's value changes
+                                                                    if (score != newScore) {
+                                                                        // Check if the score already exists in initialScores
+                                                                        if (initialScores.find { it.id == skill.id } == null){
+                                                                            // add the score to the initialScores
+                                                                            initialScores.add(score.copy())
+                                                                        }
+                                                                        // Check if the score already exists in the scoreUpdates
+                                                                        if (scoreUpdates.find { it.id == skill.id } == null){
+                                                                            // remove the score to the scoreUpdates
+                                                                            scoreUpdates.add(score)
+                                                                        }
+
+                                                                        // Update the score's value
+                                                                        score.value = value?.toDouble()
+
+                                                                        // Update the component scores
+                                                                        updateComponentScores = true
+
+                                                                        // there might be a simple mathematic rule for this
+
+                                                                    }
+
+                                                                    expanded = false
+                                                                }
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }

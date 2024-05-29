@@ -49,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
+import org.ktorm.dsl.isNotNull
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
@@ -111,7 +112,9 @@ class ComponentsOverviewActivity : ComponentActivity() {
                     }
                     // Fetch the list of students
                     val students = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Users).filter { it.roleId eq studentRole!!.id }
+                        database.sequenceOf(Schemas.Users)
+                            .filter { it.roleId eq studentRole!!.id }
+                            .filter { it.groupId.isNotNull()}
                             .toList()
                     }
                     if (components.isNotEmpty()) {
@@ -135,8 +138,7 @@ class ComponentsOverviewActivity : ComponentActivity() {
                                     // Avoid duplicate groups if there are duplicate entries in the database
                                     if ((assignedGroupToAssignedComponent.find { it.id == pair.group.id } == null) and (pair.component.id == assignedComponent.id)) {
                                         // Assign the student list to the the group
-                                        pair.group.students =
-                                            students.filter { it.group.id == pair.group.id }
+                                        pair.group.students = students.filter { it.group!!.id == pair.group.id }
                                         // add the group to the mutable list
                                         assignedGroupToAssignedComponent.add(pair.group)
                                     }
@@ -195,8 +197,6 @@ class ComponentsOverviewActivity : ComponentActivity() {
     @Composable
     fun ConsultNotesScreen(app: App, tutor: User, components: List<Component>) {
         val context = LocalContext.current
-        val expandedComponents = remember { mutableStateOf(components.map { it.id }.toSet()) }
-
 
 
         Scaffold(

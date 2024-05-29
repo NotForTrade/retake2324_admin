@@ -16,7 +16,7 @@ interface Announcement : Entity<Announcement> {
     companion object : Entity.Factory<Announcement>()
     var id: Int
     var tutor: User
-    var group: Group
+    var group: Group?
     var title: String
     var content: String
     var datetime: String
@@ -67,10 +67,10 @@ interface User : Entity<User> {
     companion object : Entity.Factory<User>()
     var id: Int
     var role: Role
-    var group: Group
-    var module: Module
-    var component: Component
-    var photo: String
+    var group: Group?
+    var module: Module?
+    var component: Component?
+    var photo: String?
     var firstName: String
     var lastName: String
     var email: String
@@ -112,8 +112,8 @@ interface Score : Entity<Score> {
     var id: Int
     var student: User
     var skill: Skill
-    var value: Double
-    var observation: String
+    var value: Double?
+    var observation: String?
     var active: Boolean
     var datetime: String
 }
@@ -123,7 +123,7 @@ interface Reassessment: Entity<Reassessment> {
     var id: Int
     var student: User
     var skill: Skill
-    var score: Score
+    var score: Score?
     var document: String
     var datetime: String
     var treated: Boolean
