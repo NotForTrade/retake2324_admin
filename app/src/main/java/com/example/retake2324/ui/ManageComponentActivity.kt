@@ -1,11 +1,9 @@
 package com.example.retake2324.ui
 
-import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,13 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,21 +30,17 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.PopupProperties
 import com.example.retake2324.core.App
 import com.example.retake2324.data.Component
-import com.example.retake2324.data.Group
 import com.example.retake2324.data.Schemas
 import com.example.retake2324.data.Skill
 import com.example.retake2324.data.TutorMapping
@@ -60,7 +49,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
-import org.ktorm.dsl.isNotNull
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
@@ -174,8 +162,18 @@ class ManageComponentActivity : ComponentActivity() {
     fun ManageComponentScreen(app: App, tutor: User, component: Component) {
         val context = LocalContext.current
 
-        var showDialog by remember { mutableStateOf(false) }
+        var skillName by remember { mutableStateOf("") }
+        var skillDescription by remember { mutableStateOf("") }
+        var skillCoefficient by remember { mutableIntStateOf(1) }
+
+        var showEditSkillDialog by remember { mutableStateOf(false) }
         var skillBeingEdited by remember { mutableStateOf<Skill?>(null) } // State to keep track of the skill being edited
+
+        var showDeleteSkillDialog by remember { mutableStateOf(false) }
+        var skillBeingDeleted by remember { mutableStateOf<Skill?>(null) } // State to keep track of the skill being deleted
+
+        var showAddingSkillDialog by remember { mutableStateOf(false) }
+        var skillBeingAdded by remember { mutableStateOf<Skill?>(null) } // State to keep track of the skill being added
 
         val skillsToAdd = remember { mutableStateListOf<Skill>() }
         val skillsToEdit = remember { mutableStateListOf<Skill>() }
@@ -195,22 +193,36 @@ class ManageComponentActivity : ComponentActivity() {
                     .padding(innerPadding)
                     .padding(16.dp)
             ) {
-                if (showDialog) {
+
+
+
+                // AlertDialog for modifying skills
+                if (showEditSkillDialog) {
+
+                    // Mandatory to have these variables because Textfields don't support object's attributes modification
+                    skillName = skillBeingEdited!!.name
+                    skillDescription = skillBeingEdited!!.description
+                    skillCoefficient = skillBeingEdited!!.coefficient
+
                     AlertDialog(
-                        onDismissRequest = { showDialog = false },
+                        onDismissRequest = { showEditSkillDialog = false },
                         confirmButton = {
                             TextButton(onClick = {
-                                // Update the skill in component.skills and close the dialog
+
+                                skillBeingEdited!!.name = skillName
+                                skillBeingEdited!!.description = skillDescription
+                                skillBeingEdited!!.coefficient = skillCoefficient
+
                                 if (skillsToEdit.find {it.id == skillBeingEdited!!.id } == null){
-                                    skillsToEdit.add(skillBeingEdited!!)
+                                    skillsToEdit.add(skillBeingEdited!!.copy())
                                 }
-                                showDialog = false
+                                showEditSkillDialog = false
                             }) {
                                 Text("Confirm")
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showDialog = false }) {
+                            TextButton(onClick = { showEditSkillDialog = false }) {
                                 Text("Dismiss")
                             }
                         },
@@ -218,27 +230,126 @@ class ManageComponentActivity : ComponentActivity() {
 
                             Column {
                                 TextField(
-                                    value = skillBeingEdited!!.name,
-                                    onValueChange = { skillBeingEdited!!.name = it },
+                                    value = skillName,
+                                    onValueChange = {
+                                        skillName = it
+                                    },
                                     label = { Text("Name") }
                                 )
                                 TextField(
-                                    value = skillBeingEdited!!.description,
-                                    onValueChange = { skillBeingEdited!!.description = it },
+                                    value = skillDescription,
+                                    onValueChange = { skillDescription = it },
                                     label = { Text("Description") }
                                 )
                                 TextField(
-                                    value = skillBeingEdited!!.coefficient.toString(),
-                                    onValueChange = {skillBeingEdited!!.coefficient = it.toInt() },
+                                    value = if (skillCoefficient != 0) skillCoefficient.toString() else "",
+                                    onValueChange = { skillCoefficient = if (it.isNotEmpty()) it.toInt() else 0 },
                                     label = { Text("Coefficient") }
                                 )
                             }
+                        }
 
+                    )
+                }
+
+                // AlertDialog for deleting skills
+                if (showDeleteSkillDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteSkillDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (skillsToDelete.find {it.id == skillBeingDeleted!!.id } == null){
+                                    skillsToDelete.add(skillBeingDeleted!!)
+                                }
+                                if (skillsToAdd.find {it.id == skillBeingDeleted!!.id } == null){
+                                    skillsToAdd.remove(skillBeingDeleted!!)
+                                }
+                                component.skills -= skillBeingDeleted!!
+                                showDeleteSkillDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteSkillDialog = false }) {
+                                Text("Dismiss")
+                            }
                         }
                     )
                 }
 
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+                // AlertDialog for adding skills
+                if (showAddingSkillDialog) {
+
+                    // Mandatory to have these variables because Textfields don't support object's attributes modification
+                    skillName = ""
+                    skillDescription = ""
+                    skillCoefficient = 1
+
+                    AlertDialog(
+                        onDismissRequest = { showAddingSkillDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+
+                                skillBeingAdded = Skill {
+                                    this.component = component
+                                    this.name = skillName
+                                    this.description = skillDescription
+                                    this.coefficient = skillCoefficient
+                                }
+
+                                if (skillsToAdd.find {it.id == skillBeingAdded!!.id } == null){
+                                    skillsToAdd.add(skillBeingAdded!!)
+                                }
+                                if (skillsToDelete.find {it.id == skillBeingAdded!!.id } == null){
+                                    skillsToDelete.remove(skillBeingAdded!!)
+                                }
+                                component.skills += skillBeingAdded!!
+                                showAddingSkillDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAddingSkillDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+
+
+                            Column {
+                                TextField(
+                                    value = skillName,
+                                    onValueChange = {
+                                        skillName = it
+                                    },
+                                    label = { Text("Name") }
+                                )
+                                TextField(
+                                    value = skillDescription,
+                                    onValueChange = { skillDescription = it },
+                                    label = { Text("Description") }
+                                )
+                                TextField(
+                                    value = if (skillCoefficient != 0) skillCoefficient.toString() else "",
+                                    onValueChange = { skillCoefficient = if (it.isNotEmpty()) it.toInt() else 0 },
+                                    label = { Text("Coefficient") }
+                                )
+                            }
+                        }
+
+
+
+                    )
+                }
+
+
+
+                LazyColumn(modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)) {
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -277,10 +388,7 @@ class ManageComponentActivity : ComponentActivity() {
                             Row {
                                 IconButton(onClick = {
                                     skillBeingEdited = skill
-                                    if (!skillsToEdit.contains(skill)) {
-                                        skillsToEdit.add(skill)
-                                    }
-                                    showDialog = true
+                                    showEditSkillDialog = true
                                 }) {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
@@ -288,8 +396,8 @@ class ManageComponentActivity : ComponentActivity() {
                                     )
                                 }
                                 IconButton(onClick = {
-                                    component.skills -= skill
-                                    skillsToDelete.add(skill)
+                                    skillBeingDeleted = skill
+                                    showDeleteSkillDialog = true
                                 }) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
@@ -302,7 +410,9 @@ class ManageComponentActivity : ComponentActivity() {
 
                     item {
                         Button(
-                            onClick = { },
+                            onClick = {
+                                      showAddingSkillDialog = true
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Add Skill")
