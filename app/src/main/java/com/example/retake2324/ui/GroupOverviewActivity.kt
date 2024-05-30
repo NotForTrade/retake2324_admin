@@ -171,7 +171,7 @@ class GroupOverviewActivity : ComponentActivity() {
                                     this.student = student
                                     skill // not used
                                     this.value =
-                                        if (coefficientSum != 0.0) weightedScoreSum / coefficientSum else 0.0
+                                        if (coefficientSum != 0.0) weightedScoreSum / coefficientSum else null
                                     observation // not used
                                 })
                             }
@@ -353,9 +353,15 @@ class GroupOverviewActivity : ComponentActivity() {
                                             }
                                     )
                                     students.forEachIndexed { index, student ->
-                                        val score = component.scores.find { it.student.id == student.id }?.value ?: 0.0
+                                        val textScore: String
+                                        val score = component.scores.find { it.student.id == student.id }?.value
+                                        if (score != null) {
+                                            textScore = BigDecimal(score).setScale(1, RoundingMode.HALF_UP).toString()
+                                        } else {
+                                            textScore = "-"
+                                        }
                                         Text(
-                                            text = BigDecimal(score).setScale(1, RoundingMode.HALF_UP).toString(),
+                                            text = textScore,
                                             style = MaterialTheme.typography.titleSmall,
                                             modifier = Modifier.width(columnWidths[index + 1])
                                         )
@@ -413,8 +419,10 @@ class GroupOverviewActivity : ComponentActivity() {
                                                                     val newScore = score!!.copy()
                                                                     newScore.value = value?.toDouble()
 
+
+
                                                                     // Check if the score's value changes
-                                                                    if (score != newScore) {
+                                                                    if (score.value != newScore.value) {
                                                                         // Check if the score already exists in initialScores
                                                                         if (initialScores.find { it.id == skill.id } == null){
                                                                             // add the score to the initialScores
@@ -426,13 +434,27 @@ class GroupOverviewActivity : ComponentActivity() {
                                                                             scoreUpdates.add(score)
                                                                         }
 
+
+                                                                        var weightedSum = 0.0
+                                                                        var coefficientSum = 0.0
+                                                                        // Calculate the sum of coefficients
+                                                                        component.skills.forEach { skill2 ->
+                                                                            if ((skill2.id == newScore.skill.id)){
+                                                                                if ((newScore.value != null)) {
+                                                                                    weightedSum += newScore.value!! * skill2.coefficient
+                                                                                    coefficientSum += skill2.coefficient
+                                                                                }
+                                                                            } else if (skill2.scores.find {it.student.id == student.id }?.value != null){
+                                                                                weightedSum += skill2.scores.find {it.student.id == student.id }?.value!! * skill2.coefficient
+                                                                                coefficientSum += skill2.coefficient
+                                                                            }
+                                                                        }
+                                                                        // Update the component score
+                                                                        component.scores.find { it.student.id == student.id }?.value = if (coefficientSum != 0.0) weightedSum / coefficientSum else null
+
+
                                                                         // Update the score's value
                                                                         score.value = value?.toDouble()
-
-                                                                        // Update the component scores
-                                                                        updateComponentScores = true
-
-                                                                        // there might be a simple mathematic rule for this
 
                                                                     }
 
