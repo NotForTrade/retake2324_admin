@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -174,20 +175,15 @@ class ManageComponentActivity : ComponentActivity() {
         val context = LocalContext.current
 
         var showDialog by remember { mutableStateOf(false) }
-
-
+        var skillBeingEdited by remember { mutableStateOf<Skill?>(null) } // State to keep track of the skill being edited
 
         val skillsToAdd = remember { mutableStateListOf<Skill>() }
         val skillsToEdit = remember { mutableStateListOf<Skill>() }
         val skillsToDelete = remember { mutableStateListOf<Skill>() }
 
-
         val pairsToAdd = remember { mutableStateListOf<TutorMapping>() }
         val pairsToEdit = remember { mutableStateListOf<TutorMapping>() }
         val pairsToDelete = remember { mutableStateListOf<TutorMapping>() }
-
-
-
 
         Scaffold(
             topBar = { Header("Manage Component: ${component.name}", app) },
@@ -199,12 +195,17 @@ class ManageComponentActivity : ComponentActivity() {
                     .padding(innerPadding)
                     .padding(16.dp)
             ) {
-
                 if (showDialog) {
                     AlertDialog(
                         onDismissRequest = { showDialog = false },
                         confirmButton = {
-                            TextButton(onClick = { showDialog = false }) {
+                            TextButton(onClick = {
+                                // Update the skill in component.skills and close the dialog
+                                if (skillsToEdit.find {it.id == skillBeingEdited!!.id } == null){
+                                    skillsToEdit.add(skillBeingEdited!!)
+                                }
+                                showDialog = false
+                            }) {
                                 Text("Confirm")
                             }
                         },
@@ -213,7 +214,27 @@ class ManageComponentActivity : ComponentActivity() {
                                 Text("Dismiss")
                             }
                         },
-                        text = { Text("Add/Edit Dialog") }
+                        text = {
+
+                            Column {
+                                TextField(
+                                    value = skillBeingEdited!!.name,
+                                    onValueChange = { skillBeingEdited!!.name = it },
+                                    label = { Text("Name") }
+                                )
+                                TextField(
+                                    value = skillBeingEdited!!.description,
+                                    onValueChange = { skillBeingEdited!!.description = it },
+                                    label = { Text("Description") }
+                                )
+                                TextField(
+                                    value = skillBeingEdited!!.coefficient.toString(),
+                                    onValueChange = {skillBeingEdited!!.coefficient = it.toInt() },
+                                    label = { Text("Coefficient") }
+                                )
+                            }
+
+                        }
                     )
                 }
 
@@ -254,13 +275,22 @@ class ManageComponentActivity : ComponentActivity() {
                                 )
                             }
                             Row {
-                                IconButton(onClick = { /* Edit skill */ }) {
+                                IconButton(onClick = {
+                                    skillBeingEdited = skill
+                                    if (!skillsToEdit.contains(skill)) {
+                                        skillsToEdit.add(skill)
+                                    }
+                                    showDialog = true
+                                }) {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
                                         contentDescription = "Edit Skill"
                                     )
                                 }
-                                IconButton(onClick = { component.skills -= skill }) {
+                                IconButton(onClick = {
+                                    component.skills -= skill
+                                    skillsToDelete.add(skill)
+                                }) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete Skill"
@@ -272,7 +302,7 @@ class ManageComponentActivity : ComponentActivity() {
 
                     item {
                         Button(
-                            onClick = { showDialog = true },
+                            onClick = { },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Add Skill")
@@ -330,8 +360,6 @@ class ManageComponentActivity : ComponentActivity() {
                         }
                     }
 
-
-
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -342,13 +370,10 @@ class ManageComponentActivity : ComponentActivity() {
                             Text("Apply modifications")
                         }
                     }
-
-
                 }
-
-
             }
         }
     }
+
 
 }
