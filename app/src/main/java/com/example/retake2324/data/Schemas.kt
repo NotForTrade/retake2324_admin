@@ -41,6 +41,7 @@ interface Component : Entity<Component> {
     var skills: List<Skill>
     var scores: List<Score>
     var groups: List<Group>
+    var pairs: List<TutorMapping>
 }
 
 interface Module : Entity<Module> {

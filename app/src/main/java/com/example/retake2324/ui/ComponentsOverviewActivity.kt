@@ -89,76 +89,91 @@ class ComponentsOverviewActivity : ComponentActivity() {
             } else if (tutor.role.name == "Student") {
                 Log.e("STUDENT FOUND", "A STUDENT IS MATCHING THE ID")
                 return Pair(null, emptyList())
-            } else { // Tutor role is valid
-                val componentGroupPairs: List<TutorMapping>
-                if (tutor.role.name == "Tutor") {
-                    // Fetch all the students from the user's group
-                    componentGroupPairs = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.TutorMappings).filter { it.tutorId eq tutorId }
-                            .toList()
-                    }
-                } else { // Higher privilege has no filter restriction
-                    componentGroupPairs = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.TutorMappings).toList()
-                    }
+            }
+            Log.d("TUTOR FOUND", "###########################################")
+
+            // Fetch the tutor_mappings
+            val componentGroupPairs: List<TutorMapping>
+            if (tutor.role.name == "Tutor") {
+                componentGroupPairs = withContext(Dispatchers.IO) {
+                    database.sequenceOf(Schemas.TutorMappings).filter { it.tutorId eq tutorId }
+                        .toList()
                 }
-                if (componentGroupPairs.isNotEmpty()) {
-                    val components = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Components).toList()
-                    }
-                    // Fetch the student role object
-                    val studentRole = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Roles).find { it.name eq "Student" }
-                    }
-                    // Fetch the list of students
-                    val students = withContext(Dispatchers.IO) {
-                        database.sequenceOf(Schemas.Users)
-                            .filter { it.roleId eq studentRole!!.id }
-                            .filter { it.groupId.isNotNull()}
-                            .toList()
-                    }
-                    if (components.isNotEmpty()) {
-
-                        // Collect all the components the tutor is assigned to
-                        val assignedComponents: MutableList<Component> = mutableListOf()
-                        componentGroupPairs.forEach { pair ->
-                            // Avoid retrieving duplicates
-                            if (assignedComponents.find { it.id == pair.component.id } == null) {
-                                components.find { it.name == pair.component.name }
-                                    ?.let { assignedComponents.add(it) }
-                            }
-                        }
-                        if (assignedComponents.isNotEmpty()) {
-
-                            // Attribute all the groups to the components
-                            assignedComponents.forEach { assignedComponent ->
-                                val assignedGroupToAssignedComponent: MutableList<Group> =
-                                    mutableListOf()
-                                componentGroupPairs.forEach { pair ->
-                                    // Avoid duplicate groups if there are duplicate entries in the database
-                                    if ((assignedGroupToAssignedComponent.find { it.id == pair.group.id } == null) and (pair.component.id == assignedComponent.id)) {
-                                        // Assign the student list to the the group
-                                        pair.group.students = students.filter { it.group!!.id == pair.group.id }
-                                        // add the group to the mutable list
-                                        assignedGroupToAssignedComponent.add(pair.group)
-                                    }
-                                }
-                                assignedComponent.groups = assignedGroupToAssignedComponent
-                            }
-                            return Pair(tutor, assignedComponents)
-                        } else {
-                            Log.e("NO ASSIGNED COMPONENT", "TUTOR MANAGES NO COMPONENT")
-                            return Pair(null, listOf())
-                        }
-                    } else {
-                        Log.e("NO COMPONENT", "NO COMPONENT FOUND IN DATABASE!")
-                        return Pair(null, listOf())
-                    }
-                } else { // tutor_mapping is empty
-                    Log.e("NO MAPPING", "NO TUTOR MAPPING ENTRY")
-                    return Pair(null, listOf())
+            } else { // Higher privilege have no filter restriction
+                componentGroupPairs = withContext(Dispatchers.IO) {
+                    database.sequenceOf(Schemas.TutorMappings).toList()
                 }
             }
+            if (componentGroupPairs.isEmpty()) {
+                Log.e("NO MAPPING", "NO TUTOR MAPPING ENTRY")
+                return Pair(null, listOf())
+            }
+            Log.d("MAPPING FOUND", "###########################################")
+
+            // Fetch all the components
+            val components = withContext(Dispatchers.IO) {
+                database.sequenceOf(Schemas.Components).toList()
+            }
+            Log.d("COMPONENTS FOUND", "###########################################")
+
+            // Fetch the student role object
+            val studentRole = withContext(Dispatchers.IO) {
+                database.sequenceOf(Schemas.Roles).find { it.name eq "Student" }
+            }
+            if (studentRole == null) {
+                Log.e("STUDENT ROLE NOT FOUND", "##################################")
+                return Pair(tutor, listOf())
+            }
+            Log.d("STUDENT ROLE FOUND", "###################### $studentRole ######################")
+
+            // Fetch the list of students
+            val students = withContext(Dispatchers.IO) {
+                database.sequenceOf(Schemas.Users)
+                    .filter { it.roleId eq studentRole!!.id }
+                    .filter { it.groupId.isNotNull()}
+                    .toList()
+            }
+            if (components.isEmpty()) {
+                Log.e("NO COMPONENT", "NO COMPONENT FOUND IN DATABASE!")
+                return Pair(null, listOf())
+            }
+            Log.d("STUDENT LIST FOUND", "###########################################")
+
+            // Collect all the components the tutor is assigned to
+            val assignedComponents: MutableList<Component> = mutableListOf()
+            componentGroupPairs.forEach { pair ->
+                // Avoid retrieving duplicates
+                if (assignedComponents.find { it.id == pair.component.id } == null) {
+                    components.find { it.name == pair.component.name }
+                        ?.let { assignedComponents.add(it) }
+                }
+            }
+            if (assignedComponents.isEmpty()) {
+                Log.e("NO ASSIGNED COMPONENT", "TUTOR MANAGES NO COMPONENT")
+                return Pair(null, listOf())
+            }
+            Log.d("ASSIGNED COMP FOUND", "###########################################")
+
+            // Attribute all the groups to the components
+            assignedComponents.forEach { assignedComponent ->
+                val assignedGroupToAssignedComponent: MutableList<Group> =
+                    mutableListOf()
+                componentGroupPairs.forEach { pair ->
+                    // Avoid duplicate groups if there are duplicate entries in the database
+                    if ((assignedGroupToAssignedComponent.find { it.id == pair.group.id } == null) and (pair.component.id == assignedComponent.id)) {
+                        // Assign the student list to the the group
+                        pair.group.students = students.filter { it.group!!.id == pair.group.id }
+                        // add the group to the mutable list
+                        assignedGroupToAssignedComponent.add(pair.group)
+                    }
+                }
+                assignedComponent.groups = assignedGroupToAssignedComponent
+            }
+            Log.d("COMP LIST ATTR", "###########################################")
+            return Pair(tutor, assignedComponents)
+
+
+
         } catch (e: Exception) {
             Log.e("SQL FETCHING ERROR", e.toString())
             return Pair(null, listOf())
@@ -186,6 +201,12 @@ class ComponentsOverviewActivity : ComponentActivity() {
 
         if (isLoading) {
             Text(text = "Loading...", modifier = Modifier.padding(16.dp))
+        } else if (tutor == null) {
+            Text(text = "TUTOR NOT FOUND", modifier = Modifier.padding(16.dp))
+        } else if (tutor!!.role.name == "Student") {
+            Text(text = "Tutor has student role!", modifier = Modifier.padding(16.dp))
+        } else if (components.isEmpty()) {
+            Text(text = "No assigned components, or an internal error occured.", modifier = Modifier.padding(16.dp))
         } else {
             ConsultNotesScreen(app, tutor!!, components)
         }
@@ -222,9 +243,11 @@ class ComponentsOverviewActivity : ComponentActivity() {
                                             enabled = tutor.role.name != "Tutor",
                                             onClick = {
                                                 if (tutor.role.name != "Tutor") {
-
-                                                // todo    navigateToManageComponent(context, tutorId, component.name)
-
+                                                    isExpanded = false
+                                                    val intent = Intent(context, ManageComponentActivity::class.java)
+                                                    intent.putExtra("tutorId", tutor.id)
+                                                    intent.putExtra("componentId", component.id)
+                                                    startActivity(intent)
                                                 }
                                             }
                                         ),

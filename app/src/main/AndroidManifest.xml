@@ -40,6 +40,9 @@
         <activity
             android:name=".ui.SkillActivity"
             android:exported="false"/>
+        <activity
+            android:name=".ui.ManageComponentActivity"
+            android:exported="false"/>
     </application>
 
 </manifest>
