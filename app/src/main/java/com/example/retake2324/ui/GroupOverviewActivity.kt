@@ -10,13 +10,17 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +33,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -49,6 +54,7 @@ import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
 import org.ktorm.entity.sequenceOf
+import org.ktorm.entity.update
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -271,7 +277,11 @@ class GroupOverviewActivity : ComponentActivity() {
 
         val scoreList = listOf(null, 0, 7, 10, 13, 16, 20)
 
-        var updateComponentScores by remember { mutableStateOf(false) }
+        var updateScores by remember { mutableStateOf(false) }
+        var showSubmitDialog by remember { mutableStateOf(false) }
+        var showResultDialog by remember { mutableStateOf(false) }
+        var resultDialogMessage by remember { mutableStateOf("") }
+
 
         val initialScores = remember { mutableStateListOf<Score>() }
         val scoreUpdates = remember { mutableStateListOf<Score>() }
@@ -281,7 +291,48 @@ class GroupOverviewActivity : ComponentActivity() {
 
 
 
-        LaunchedEffect(Unit) {
+        LaunchedEffect(updateScores) {
+
+            if (updateScores) {
+                try {
+
+                    Log.d("START OF UPDATES", "###########################################")
+
+                    withContext(Dispatchers.IO){
+                        val database = app.getDatabase()
+
+                        initialScores.forEach { score ->
+                            database.sequenceOf(Schemas.Scores).update(score)
+                        }
+
+                        Log.d("INIT SCORES UPDATED", "###########################################")
+
+                        scoreUpdates.forEach { score ->
+                            database.sequenceOf(Schemas.Scores).add(Score{
+                                this.student = score.student
+                                this.skill = score.skill
+                                this.value = score.value
+                                this.observation = score.observation
+                                this.active = true
+                            })
+                        }
+
+                    }
+
+                    Log.d("SCORE UPDATE SUCCESS", "########################################################")
+                    showResultDialog = true
+                    updateScores = false
+                    resultDialogMessage = "Success!"
+
+                }catch (e: Exception){
+
+                    Log.e("SCORE UPDATE ERROR", e.toString())
+                    showResultDialog = true
+                    updateScores = false
+                    resultDialogMessage = "An error happened!"
+                }
+
+            }
 
         }
 
@@ -425,12 +476,15 @@ class GroupOverviewActivity : ComponentActivity() {
                                                                     if (score.value != newScore.value) {
                                                                         // Check if the score already exists in initialScores
                                                                         if (initialScores.find { it.id == skill.id } == null){
+                                                                            // copy the score
+                                                                            val oldScore = score.copy()
+                                                                            // set it's active state to false
+                                                                            oldScore.active=false
                                                                             // add the score to the initialScores
-                                                                            initialScores.add(score.copy())
+                                                                            initialScores.add(oldScore)
                                                                         }
-                                                                        // Check if the score already exists in the scoreUpdates
+                                                                        // Check if the score doesn't already exist in
                                                                         if (scoreUpdates.find { it.id == skill.id } == null){
-                                                                            // remove the score to the scoreUpdates
                                                                             scoreUpdates.add(score)
                                                                         }
 
@@ -470,6 +524,65 @@ class GroupOverviewActivity : ComponentActivity() {
                                 }
                             }
                         }
+
+
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                showSubmitDialog = true
+                            },
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Text("Update Scores")
+                        }
+
+                        if (showSubmitDialog) {
+                            AlertDialog(
+                                onDismissRequest = {},
+                                title = { Text("Confirm Update") },
+                                text = { Text("Are you sure you want to update the scores?") },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            updateScores = true
+                                            showSubmitDialog = false
+                                            Log.d("UPDATE SCORES", updateScores.toString())
+                                        }
+                                    ) {
+                                        Text("Confirm")
+                                    }
+                                },
+                                dismissButton = {
+                                    Button(
+                                        onClick = { showSubmitDialog = false }
+                                    ) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
+
+
+                        // Show Dialog if needed
+                        if (showResultDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showResultDialog = false },
+                                title = { Text("Submission Status") },
+                                text = { Text(resultDialogMessage) },
+                                confirmButton = {
+                                    Button(
+                                        onClick = { showResultDialog = false }
+                                    ) {
+                                        Text("Ok")
+                                    }
+                                }
+                            )
+                        }
+
+
+
                     }
                 }
             }
