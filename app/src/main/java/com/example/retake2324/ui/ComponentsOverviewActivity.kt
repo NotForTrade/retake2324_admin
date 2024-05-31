@@ -1,5 +1,6 @@
 package com.example.retake2324.ui
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -27,9 +30,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +49,7 @@ import com.example.retake2324.core.App
 import com.example.retake2324.data.Component
 import com.example.retake2324.data.Group
 import com.example.retake2324.data.Schemas
+import com.example.retake2324.data.Score
 import com.example.retake2324.data.TutorMapping
 import com.example.retake2324.data.User
 import kotlinx.coroutines.Dispatchers
@@ -50,10 +57,12 @@ import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
 import org.ktorm.dsl.isNotNull
+import org.ktorm.entity.add
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.toList
 import org.ktorm.entity.sequenceOf
+import org.ktorm.entity.update
 
 
 class ComponentsOverviewActivity : ComponentActivity() {
@@ -92,6 +101,12 @@ class ComponentsOverviewActivity : ComponentActivity() {
             }
             Log.d("TUTOR FOUND", "###########################################")
 
+            // Fetch all the components
+            val components = withContext(Dispatchers.IO) {
+                database.sequenceOf(Schemas.Components).toList()
+            }
+            Log.d("COMPONENTS FOUND", "###########################################")
+
             // Fetch the tutor_mappings
             val componentGroupPairs: List<TutorMapping>
             if (tutor.role.name == "Tutor") {
@@ -99,22 +114,24 @@ class ComponentsOverviewActivity : ComponentActivity() {
                     database.sequenceOf(Schemas.TutorMappings).filter { it.tutorId eq tutorId }
                         .toList()
                 }
-            } else { // Higher privilege have no filter restriction
-                componentGroupPairs = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.TutorMappings).toList()
+            } else { // Higher privilege can see all components
+
+                val skills = withContext(Dispatchers.IO) {
+                    database.sequenceOf(Schemas.Skills).toList()
                 }
+
+                components.forEach { component ->
+                    component.skills = skills.filter { it.component.id == component.id }
+                }
+
+
+                return Pair(tutor, components)
             }
             if (componentGroupPairs.isEmpty()) {
                 Log.e("NO MAPPING", "NO TUTOR MAPPING ENTRY")
-                return Pair(null, listOf())
+                return Pair(tutor, listOf())
             }
             Log.d("MAPPING FOUND", "###########################################")
-
-            // Fetch all the components
-            val components = withContext(Dispatchers.IO) {
-                database.sequenceOf(Schemas.Components).toList()
-            }
-            Log.d("COMPONENTS FOUND", "###########################################")
 
             // Fetch the student role object
             val studentRole = withContext(Dispatchers.IO) {
@@ -135,7 +152,7 @@ class ComponentsOverviewActivity : ComponentActivity() {
             }
             if (components.isEmpty()) {
                 Log.e("NO COMPONENT", "NO COMPONENT FOUND IN DATABASE!")
-                return Pair(null, listOf())
+                return Pair(tutor, listOf())
             }
             Log.d("STUDENT LIST FOUND", "###########################################")
 
@@ -205,8 +222,6 @@ class ComponentsOverviewActivity : ComponentActivity() {
             Text(text = "TUTOR NOT FOUND", modifier = Modifier.padding(16.dp))
         } else if (tutor!!.role.name == "Student") {
             Text(text = "Tutor has student role!", modifier = Modifier.padding(16.dp))
-        } else if (components.isEmpty()) {
-            Text(text = "No assigned components, or an internal error occured.", modifier = Modifier.padding(16.dp))
         } else {
             ConsultNotesScreen(app, tutor!!, components)
         }
@@ -215,10 +230,14 @@ class ComponentsOverviewActivity : ComponentActivity() {
 
 
 
+    @SuppressLint("MutableCollectionMutableState")
     @Composable
     fun ConsultNotesScreen(app: App, tutor: User, components: List<Component>) {
         val context = LocalContext.current
 
+        var showAddComponentDialog by remember { mutableStateOf(false) }
+        var componentName by remember { mutableStateOf("") }
+        var createComponent by remember { mutableStateOf(false) }
 
         Scaffold(
             topBar = { Header("Components Overview", app) },
@@ -231,118 +250,197 @@ class ComponentsOverviewActivity : ComponentActivity() {
                     .padding(16.dp)
             ) {
 
-                LazyColumn(modifier = Modifier.padding(16.dp)) {
-                    components.forEach { component ->
-                        item {
-                            var isExpanded by remember { mutableStateOf(true) }
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable(
-                                            enabled = tutor.role.name != "Tutor",
-                                            onClick = {
-                                                if (tutor.role.name != "Tutor") {
-                                                    isExpanded = false
-                                                    val intent = Intent(context, ManageComponentActivity::class.java)
-                                                    intent.putExtra("tutorId", tutor.id)
-                                                    intent.putExtra("componentId", component.id)
-                                                    startActivity(intent)
-                                                }
-                                            }
-                                        ),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = component.name,
-                                        style = MaterialTheme.typography.headlineSmall
-                                    )
-                                    IconButton(onClick = { isExpanded = !isExpanded }) {
-                                        Icon(
-                                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                            contentDescription = null
-                                        )
-                                    }
+
+                LaunchedEffect(createComponent) {
+
+                    if (createComponent) {
+                        try {
+
+                            val database = app.getDatabase()
+                            withContext(Dispatchers.IO) {
+
+                                val module = database.sequenceOf(Schemas.Modules).find{ it.id eq 1}
+                                if (module != null) {
+                                    // add the component to the database
+                                    val componentId = database.sequenceOf(Schemas.Components).add(Component{
+                                        this.name = componentName
+                                        this.module = module
+                                    })
+
+                                    // Refresh the activity
+                                    val intent = Intent(context, ComponentsOverviewActivity::class.java)
+                                    intent.putExtra("tutorId", tutor.id)
+                                    startActivity(intent)
+
+                                } else {
+                                    Log.d("MODULE NOT FOUND", "########################")
                                 }
-                                if (isExpanded) {
-                                    Row(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
-                                        Text(
-                                            text = "Skills: ",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        component.skills.forEach { skill ->
-                                            Text(
-                                                text = skill.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier
-                                                    .padding(horizontal = 4.dp)
-                                                    .clickable {
-                                                        // todo navigateToSkill(context, tutorId, skill.id)
+                            }
+
+                            Log.d("ADD COMPONENT SUCCESS", "##################################")
+                            createComponent = false
+
+                        }catch (e: Exception){
+                            Log.e("ADD COMPONENT ERROR", e.toString())
+                            createComponent = false
+                         }
+
+                    }
+
+                }
+
+
+                // Dialog to edit component name
+                if (showAddComponentDialog) {
+                    componentName = ""
+                    AlertDialog(
+                        onDismissRequest = { showAddComponentDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                createComponent = true
+                                showAddComponentDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showAddComponentDialog = false
+                            }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            TextField(
+                                value = componentName,
+                                onValueChange = {
+                                    componentName = it
+                                },
+                                label = { Text("Component name") }
+                            )
+                        }
+                    )
+                }
+
+
+
+
+
+                LazyColumn(modifier = Modifier.padding(16.dp)) {
+
+                    if (components.isNotEmpty()){
+                        components.forEach { component ->
+                            item {
+                                var isExpanded by remember { mutableStateOf(true) }
+                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable(
+                                                enabled = tutor.role.name != "Tutor",
+                                                onClick = {
+                                                    if (tutor.role.name != "Tutor") {
+                                                        isExpanded = false
+                                                        val intent = Intent(context, ManageComponentActivity::class.java)
+                                                        intent.putExtra("tutorId", tutor.id)
+                                                        intent.putExtra("componentId", component.id)
+                                                        startActivity(intent)
                                                     }
+                                                }
+                                            ),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = component.name,
+                                            style = MaterialTheme.typography.headlineSmall
+                                        )
+                                        IconButton(onClick = { isExpanded = !isExpanded }) {
+                                            Icon(
+                                                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                contentDescription = null
                                             )
                                         }
                                     }
-                                    component.groups.forEach { group ->
-                                        Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
+                                    if (isExpanded) {
+                                        Row(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
+                                            Text(
+                                                text = "Skills: ",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            component.skills.forEach { skill ->
                                                 Text(
-                                                    text = group.name,
-                                                    style = MaterialTheme.typography.titleMedium
-                                                )
-                                                var expanded by remember { mutableStateOf(false) }
-                                                Box {
-                                                    IconButton(onClick = { expanded = true }) {
-                                                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More actions")
-                                                    }
-                                                    DropdownMenu(
-                                                        expanded = expanded,
-                                                        onDismissRequest = { expanded = false },
-                                                        offset = DpOffset(x = 0.dp, y = 0.dp),
-                                                        properties = PopupProperties(focusable = true)
-                                                    ) {
-                                                        DropdownMenuItem(
-                                                            onClick = {
-                                                                expanded = false
-                                                                val intent = Intent(context, GroupOverviewActivity::class.java)
-                                                                intent.putExtra("tutorId", tutor.id)
-                                                                intent.putExtra("groupId", group.id)
-                                                                startActivity(intent)
-                                                            },
-                                                            text = { Text("View Group Overview") }
-                                                        )
-                                                        DropdownMenuItem(
-                                                            onClick = {
-                                                                // todo navigateToGroupSynthesis(context, tutorId, group.name)
-                                                                expanded = false
-                                                            },
-                                                            text = { Text("View Group Synthesis") }
-                                                        )
-                                                        DropdownMenuItem(
-                                                            onClick = {
-                                                                // todo navigateToManageGroup(context, tutorId, group.name)
-                                                                expanded = false
-                                                            },
-                                                            text = { Text("Manage Group") }
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            group.students.forEach { student ->
-                                                Text(
-                                                    text = "${student.firstName} ${student.lastName}",
+                                                    text = skill.name,
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     modifier = Modifier
-                                                        .padding(start = 32.dp)
+                                                        .padding(horizontal = 4.dp)
                                                         .clickable {
-                                                            // todo navigateToProfile(context, tutorId, student.name)
+                                                            // todo navigateToSkill(context, tutorId, skill.id)
                                                         }
                                                 )
+                                            }
+                                        }
+                                        component.groups.forEach { group ->
+                                            Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = group.name,
+                                                        style = MaterialTheme.typography.titleMedium
+                                                    )
+                                                    var expanded by remember { mutableStateOf(false) }
+                                                    Box {
+                                                        IconButton(onClick = { expanded = true }) {
+                                                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More actions")
+                                                        }
+                                                        DropdownMenu(
+                                                            expanded = expanded,
+                                                            onDismissRequest = { expanded = false },
+                                                            offset = DpOffset(x = 0.dp, y = 0.dp),
+                                                            properties = PopupProperties(focusable = true)
+                                                        ) {
+                                                            DropdownMenuItem(
+                                                                onClick = {
+                                                                    expanded = false
+                                                                    val intent = Intent(context, GroupOverviewActivity::class.java)
+                                                                    intent.putExtra("tutorId", tutor.id)
+                                                                    intent.putExtra("groupId", group.id)
+                                                                    startActivity(intent)
+                                                                },
+                                                                text = { Text("View Group Overview") }
+                                                            )
+                                                            DropdownMenuItem(
+                                                                onClick = {
+                                                                    // todo navigateToGroupSynthesis(context, tutorId, group.name)
+                                                                    expanded = false
+                                                                },
+                                                                text = { Text("View Group Synthesis") }
+                                                            )
+                                                            DropdownMenuItem(
+                                                                onClick = {
+                                                                    // todo navigateToManageGroup(context, tutorId, group.name)
+                                                                    expanded = false
+                                                                },
+                                                                text = { Text("Manage Group") }
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                group.students.forEach { student ->
+                                                    Text(
+                                                        text = "${student.firstName} ${student.lastName}",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        modifier = Modifier
+                                                            .padding(start = 32.dp)
+                                                            .clickable {
+                                                                // todo navigateToProfile(context, tutorId, student.name)
+                                                            }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -350,10 +448,17 @@ class ComponentsOverviewActivity : ComponentActivity() {
                             }
                         }
                     }
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = { showAddComponentDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Create a new component")
+                        }
+                    }
                 }
-
-
-
             }
         }
     }

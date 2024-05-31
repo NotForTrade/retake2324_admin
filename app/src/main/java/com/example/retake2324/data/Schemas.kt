@@ -36,7 +36,6 @@ interface Component : Entity<Component> {
     companion object : Entity.Factory<Component>()
     var id:  Int
     var module: Module
-    var tutor: User
     var name: String
     var skills: List<Skill>
     var scores: List<Score>
@@ -158,6 +157,7 @@ object Schemas {
 
     object Components : Table<Component>("component") {
         val id = int("id").primaryKey().bindTo { it.id}
+        val moduleId = int("module_id").references(Modules) { it.module }
         val name = varchar("name").bindTo { it.name }
     }
 
