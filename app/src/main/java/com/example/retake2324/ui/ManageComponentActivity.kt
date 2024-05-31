@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -141,10 +142,10 @@ class ManageComponentActivity : ComponentActivity() {
             val tutorRole = withContext(Dispatchers.IO) {
                 database.sequenceOf(Schemas.Roles).find { it.name eq "Tutor" }
             }
-            val tutors: List<User> = listOf()
+            var tutors: List<User> = listOf()
             if (tutorRole != null) {
-                val tutors = withContext(Dispatchers.IO) {
-                    database.sequenceOf(Schemas.Users).filter { it.roleId eq tutorRole.id}
+                tutors = withContext(Dispatchers.IO) {
+                    database.sequenceOf(Schemas.Users).filter { it.roleId eq tutorRole.id}.toList()
                 }
             }
 
@@ -217,10 +218,10 @@ class ManageComponentActivity : ComponentActivity() {
 
 
         var expandedGroup by remember { mutableStateOf(false) }
-        var selectedGroup by remember { mutableStateOf(groups[0]) }
+        var selectedGroup by remember { mutableStateOf<Group?>(null) }
 
         var expandedTutor by remember { mutableStateOf(false) }
-        var selectedTutor by remember { mutableStateOf(tutors[0]) }
+        var selectedTutor by remember { mutableStateOf<User?>(null) }
 
         var showEditPairDialog by remember { mutableStateOf(false) }
         var pairBeingEdited by remember { mutableStateOf<TutorMapping?>(null) }
@@ -406,14 +407,17 @@ class ManageComponentActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
 
-                                pairBeingEdited!!.group = selectedGroup
-                                pairBeingEdited!!.tutor = selectedTutor
+                                pairBeingEdited!!.group = selectedGroup!!
+                                pairBeingEdited!!.tutor = selectedTutor!!
                                 if (pairsToEdit.find { it.id != pairBeingEdited!!.id } == null) {
                                     pairsToEdit.add(pairBeingEdited!!)
                                 }
 
                                 showEditPairDialog = false
-                            }) {
+                            },
+                                enabled = (selectedGroup != null) and (selectedTutor != null)
+
+                            ) {
                                 Text("Confirm")
                             }
                         },
@@ -428,10 +432,11 @@ class ManageComponentActivity : ComponentActivity() {
                                     Text(text = "Group: ")
                                     Box {
                                         Text(
-                                            text = selectedGroup.name,
+                                            text = selectedGroup?.name ?: "Select a group",
                                             modifier = Modifier
                                                 .clickable { expandedGroup = true }
-                                                .padding(8.dp)
+                                                .padding(8.dp),
+                                            color = Color.Black
                                         )
                                         DropdownMenu(
                                             expanded = expandedGroup,
@@ -439,11 +444,15 @@ class ManageComponentActivity : ComponentActivity() {
                                         ) {
                                             groups.forEach { group ->
                                                 DropdownMenuItem(
-                                                    text = { group.name },
+                                                    text = { Text(
+                                                        text = group.name,
+                                                        color = Color.Black
+                                                        )},
                                                     onClick = {
                                                         selectedGroup = group
                                                         expandedGroup = false
                                                     }
+
                                                 )
                                             }
                                         }
@@ -456,10 +465,11 @@ class ManageComponentActivity : ComponentActivity() {
                                     Text(text = "Tutor: ")
                                     Box {
                                         Text(
-                                            text = "${selectedTutor.firstName} ${selectedTutor.lastName}",
+                                            text = if (selectedTutor != null) "${selectedTutor!!.firstName} ${selectedTutor!!.lastName}" else "Select a Tutor",
                                             modifier = Modifier
                                                 .clickable { expandedTutor = true }
-                                                .padding(8.dp)
+                                                .padding(8.dp),
+                                            color = Color.Black
                                         )
                                         DropdownMenu(
                                             expanded = expandedTutor,
@@ -467,7 +477,10 @@ class ManageComponentActivity : ComponentActivity() {
                                         ) {
                                             tutors.forEach { tutor ->
                                                 DropdownMenuItem(
-                                                    text = { "${tutor.firstName} ${tutor.lastName}" },
+                                                    text = { Text(
+                                                     text = "${tutor.firstName} ${tutor.lastName}",
+                                                        color = Color.Black
+                                                    )},
                                                     onClick = {
                                                         selectedTutor = tutor
                                                         expandedTutor = false
