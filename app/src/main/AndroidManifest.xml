@@ -43,6 +43,9 @@
         <activity
             android:name=".ui.ManageComponentActivity"
             android:exported="false"/>
+        <activity
+            android:name=".ui.ManageGroupsActivity"
+            android:exported="false"/>
     </application>
 
 </manifest>
