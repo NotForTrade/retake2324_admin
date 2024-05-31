@@ -1,5 +1,6 @@
 package com.example.retake2324.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -56,7 +57,6 @@ import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
 import org.ktorm.entity.add
-import org.ktorm.entity.clear
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
 import org.ktorm.entity.removeIf
@@ -106,10 +106,10 @@ class ManageComponentActivity : ComponentActivity() {
             }
             if (tutor == null) {
                 Log.e("TUTOR NOT FOUND", "TUTOR NOT FOUND IN DATABASE!")
-                return return Quadruple(null, null, emptyList(), emptyList())
+                return Quadruple(null, null, emptyList(), emptyList())
             } else if (tutor.role.name == "Student") {
                 Log.e("STUDENT FOUND", "A STUDENT IS MATCHING THE ID")
-                return return Quadruple(null, null, emptyList(), emptyList())
+                return Quadruple(null, null, emptyList(), emptyList())
             }
             else if (tutor.role.name == "Tutor") {
                 Log.e("TUTOR FOUND", "A TUTOR IS MATCHING THE ID")
@@ -203,6 +203,13 @@ class ManageComponentActivity : ComponentActivity() {
     fun ManageComponentScreen(app: App, tutor: User, component: Component, groups: List<Group>, tutors: List<User>) {
         val context = LocalContext.current
 
+        var showDeleteComponentDialog by remember { mutableStateOf(false) }
+        var showEditComponentDialog by remember { mutableStateOf(false) }
+        var deleteComponent by remember { mutableStateOf(false) }
+        var renameComponent by remember { mutableStateOf(false) }
+        var componentName by remember { mutableStateOf("") }
+
+
         var skillName by remember { mutableStateOf("") }
         var skillDescription by remember { mutableStateOf("") }
         var skillCoefficient by remember { mutableIntStateOf(1) }
@@ -256,62 +263,168 @@ class ManageComponentActivity : ComponentActivity() {
 
 
 
+                LaunchedEffect(deleteComponent) {
+                    if (deleteComponent) {
+                        try {
+                            val database = app.getDatabase()
+                            withContext(Dispatchers.IO) {
+
+                                // Delete the scores and group observations
+                                component.skills.forEach { skill ->
+                                    database.sequenceOf(Schemas.Scores).removeIf { it.skillId eq skill.id }
+                                    database.sequenceOf(Schemas.GroupObservations).removeIf { it.skillId eq skill.id }
+                                }
+                                // Delete the pairs
+                                database.sequenceOf(Schemas.TutorMappings).removeIf { it.componentId eq component.id }
+
+                                // delete the skills
+                                database.sequenceOf(Schemas.Skills).removeIf { it.componentId eq component.id }
+
+                                // Delete the component
+                                database.sequenceOf(Schemas.Components).removeIf { it.id eq component.id }
+                                Log.d("DELETE SUCCESS", "COMPONENT DELETION SUCCESS")
+
+                                renameComponent = false
+
+                                // Redirect to components overview
+                                val intent = Intent(context, ComponentsOverviewActivity::class.java)
+                                intent.putExtra("tutorId", tutor.id)
+                                startActivity(intent)
+                            }
+
+                        } catch(e: Exception) {
+                            Log.e("SQL UPDATE ERROR", e.toString())
+                            renameComponent = false
+                        }
+                    }
+                }
 
 
                 LaunchedEffect(isLoading) {
+                    if (isLoading) {
+                        try {
+                            val database = app.getDatabase()
 
-                    try {
+                            withContext(Dispatchers.IO) {
 
-                        val database = app.getDatabase()
+                                if (renameComponent) {
+                                    database.sequenceOf(Schemas.Components).update(component)
+                                    Log.d("SUCCESS", "COMPONENT NAME UPDATE SUCCESS")
+                                }
 
-                        withContext(Dispatchers.IO) {
+                                // Update the skill table
+                                if (skillsToEdit.isNotEmpty()) {
+                                    skillsToEdit.forEach { skill ->
+                                        database.sequenceOf(Schemas.Skills).update(skill)
+                                    }
+                                }
+                                if (skillsToDelete.isNotEmpty()) {
+                                    skillsToDelete.forEach { skill ->
+                                        // First delete the scores referencing to the skill
+                                        database.sequenceOf(Schemas.Scores).removeIf {it.skillId eq skill.id }
+                                        database.sequenceOf(Schemas.GroupObservations).removeIf {it.skillId eq skill.id }
+                                        // Then delete the skills
+                                        database.sequenceOf(Schemas.Skills).removeIf {it.id eq skill.id }
+                                    }
+                                }
+                                if (skillsToAdd.isNotEmpty()) {
+                                    skillsToAdd.forEach { skill ->
+                                        database.sequenceOf(Schemas.Skills).add(skill)
+                                    }
+                                }
+                                Log.d("SUCCESS UPDATING SKILLS", "#########################")
 
-                            // Update the skill table
-                            if (skillsToEdit.isNotEmpty()) {
-                                skillsToEdit.forEach { skill ->
-                                    database.sequenceOf(Schemas.Skills).update(skill)
+                                // Update the tutor_mapping table
+                                if (pairsToEdit.isNotEmpty()) {
+                                    pairsToEdit.forEach { pair ->
+                                        database.sequenceOf(Schemas.TutorMappings).update(pair)
+                                    }
                                 }
-                            }
-                            if (skillsToDelete.isNotEmpty()) {
-                                skillsToDelete.forEach { skill ->
-                                    // First delete the scores referencing to the skill
-                                    database.sequenceOf(Schemas.Scores).removeIf {it.skillId eq skill.id }
-                                    database.sequenceOf(Schemas.GroupObservations).removeIf {it.skillId eq skill.id }
-                                    // Then delete the skills
-                                    database.sequenceOf(Schemas.Skills).removeIf {it.id eq skill.id }
+                                if (pairsToDelete.isNotEmpty()) {
+                                    pairsToDelete.forEach { pair ->
+                                        database.sequenceOf(Schemas.TutorMappings).removeIf {it.id eq pair.id }
+                                    }
                                 }
-                            }
-                            if (skillsToAdd.isNotEmpty()) {
-                                skillsToAdd.forEach { skill ->
-                                    database.sequenceOf(Schemas.Skills).add(skill)
+                                if (pairsToAdd.isNotEmpty()) {
+                                    pairsToAdd.forEach { pair ->
+                                        database.sequenceOf(Schemas.TutorMappings).add(pair)
+                                    }
                                 }
+                                Log.d("SUCCESS UPDATING PAIRS", "#########################")
                             }
-                            Log.d("SUCCESS UPDATING SKILLS", "#########################")
+                            isLoading = false
 
-                            // Update the tutor_mapping table
-                            if (pairsToEdit.isNotEmpty()) {
-                                pairsToEdit.forEach { pair ->
-                                    database.sequenceOf(Schemas.TutorMappings).update(pair)
-                                }
-                            }
-                            if (pairsToDelete.isNotEmpty()) {
-                                pairsToDelete.forEach { pair ->
-                                    database.sequenceOf(Schemas.TutorMappings).removeIf {it.id eq pair.id }
-                                }
-                            }
-                            if (pairsToAdd.isNotEmpty()) {
-                                pairsToAdd.forEach { pair ->
-                                    database.sequenceOf(Schemas.TutorMappings).add(pair)
-                                }
-                            }
-                            Log.d("SUCCESS UPDATING PAIRS", "#########################")
+                            // Redirect to components overview
+                            val intent = Intent(context, ComponentsOverviewActivity::class.java)
+                            intent.putExtra("tutorId", tutor.id)
+                            startActivity(intent)
+
+                        } catch(e: Exception) {
+                            Log.e("SQL UPDATE ERROR", e.toString())
+                            isLoading = false
                         }
-                        isLoading = false
-
-                    } catch(e: Exception) {
-                        Log.e("SQL UPDATE ERROR", e.toString())
-                        isLoading = false
                     }
+                }
+
+
+                // Dialog to delete component
+                if (showDeleteComponentDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteComponentDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                deleteComponent = true
+                                showDeleteComponentDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteComponentDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            Text(
+                                text = "Are you sure you want to delete the component?\nAll the data will be lost forever.",
+                                color = Color.Black
+                            )
+                        }
+                    )
+                }
+
+
+
+                // Dialog to edit component name
+                if (showEditComponentDialog) {
+                    componentName = component.name
+
+                    AlertDialog(
+                        onDismissRequest = { showEditComponentDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                component.name = componentName
+                                renameComponent = true
+                                showEditComponentDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showEditComponentDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            TextField(
+                                value = componentName,
+                                onValueChange = {
+                                    componentName = it
+                                },
+                                label = { Text("Name") }
+                            )
+                        }
+                    )
                 }
 
 
@@ -346,7 +459,7 @@ class ManageComponentActivity : ComponentActivity() {
                 // AlertDialog for modifying skills
                 if (showEditSkillDialog) {
 
-                    // Mandatory to have these variables because Textfields don't support object's attributes modification
+                    // Mandatory to have these variables because Text fields don't support object's attributes modification
                     skillName = skillBeingEdited!!.name
                     skillDescription = skillBeingEdited!!.description
                     skillCoefficient = skillBeingEdited!!.coefficient
@@ -427,7 +540,7 @@ class ManageComponentActivity : ComponentActivity() {
                 // AlertDialog for adding skills
                 if (showAddingSkillDialog) {
 
-                    // Mandatory to have these variables because Textfields don't support object's attributes modification
+                    // Mandatory to have these variables because Text fields don't support object's attributes modification
                     skillName = ""
                     skillDescription = ""
                     skillCoefficient = 1
@@ -724,8 +837,21 @@ class ManageComponentActivity : ComponentActivity() {
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            Button(onClick = { /* Edit component name */ }) {
-                                Text("Edit Name")
+                            IconButton(onClick = {
+                                showEditComponentDialog = true
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Component"
+                                )
+                            }
+                            IconButton(onClick = {
+                                showDeleteComponentDialog = true
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete Component"
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
