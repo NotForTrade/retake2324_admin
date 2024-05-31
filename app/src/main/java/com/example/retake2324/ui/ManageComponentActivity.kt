@@ -55,10 +55,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
+import org.ktorm.entity.add
+import org.ktorm.entity.clear
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
+import org.ktorm.entity.removeIf
 import org.ktorm.entity.toList
 import org.ktorm.entity.sequenceOf
+import org.ktorm.entity.update
 
 
 class ManageComponentActivity : ComponentActivity() {
@@ -216,7 +220,6 @@ class ManageComponentActivity : ComponentActivity() {
         val skillsToEdit = remember { mutableStateListOf<Skill>() }
         val skillsToDelete = remember { mutableStateListOf<Skill>() }
 
-
         var expandedGroup by remember { mutableStateOf(false) }
         var selectedGroup by remember { mutableStateOf<Group?>(null) }
 
@@ -236,6 +239,10 @@ class ManageComponentActivity : ComponentActivity() {
         val pairsToEdit = remember { mutableStateListOf<TutorMapping>() }
         val pairsToDelete = remember { mutableStateListOf<TutorMapping>() }
 
+        var showApplyDialog by remember { mutableStateOf(false) }
+        var isLoading by remember { mutableStateOf(false) }
+
+
         Scaffold(
             topBar = { Header("Manage Component: ${component.name}", app) },
             bottomBar = { Footer(tutor.id) }
@@ -246,6 +253,93 @@ class ManageComponentActivity : ComponentActivity() {
                     .padding(innerPadding)
                     .padding(16.dp)
             ) {
+
+
+
+
+
+                LaunchedEffect(isLoading) {
+
+                    try {
+
+                        val database = app.getDatabase()
+
+                        withContext(Dispatchers.IO) {
+
+                            // Update the skill table
+                            if (skillsToEdit.isNotEmpty()) {
+                                skillsToEdit.forEach { skill ->
+                                    database.sequenceOf(Schemas.Skills).update(skill)
+                                }
+                            }
+                            if (skillsToDelete.isNotEmpty()) {
+                                skillsToDelete.forEach { skill ->
+                                    // First delete the scores referencing to the skill
+                                    database.sequenceOf(Schemas.Scores).removeIf {it.skillId eq skill.id }
+                                    database.sequenceOf(Schemas.GroupObservations).removeIf {it.skillId eq skill.id }
+                                    // Then delete the skills
+                                    database.sequenceOf(Schemas.Skills).removeIf {it.id eq skill.id }
+                                }
+                            }
+                            if (skillsToAdd.isNotEmpty()) {
+                                skillsToAdd.forEach { skill ->
+                                    database.sequenceOf(Schemas.Skills).add(skill)
+                                }
+                            }
+                            Log.d("SUCCESS UPDATING SKILLS", "#########################")
+
+                            // Update the tutor_mapping table
+                            if (pairsToEdit.isNotEmpty()) {
+                                pairsToEdit.forEach { pair ->
+                                    database.sequenceOf(Schemas.TutorMappings).update(pair)
+                                }
+                            }
+                            if (pairsToDelete.isNotEmpty()) {
+                                pairsToDelete.forEach { pair ->
+                                    database.sequenceOf(Schemas.TutorMappings).removeIf {it.id eq pair.id }
+                                }
+                            }
+                            if (pairsToAdd.isNotEmpty()) {
+                                pairsToAdd.forEach { pair ->
+                                    database.sequenceOf(Schemas.TutorMappings).add(pair)
+                                }
+                            }
+                            Log.d("SUCCESS UPDATING PAIRS", "#########################")
+                        }
+                        isLoading = false
+
+                    } catch(e: Exception) {
+                        Log.e("SQL UPDATE ERROR", e.toString())
+                        isLoading = false
+                    }
+                }
+
+
+                // Dialog to confirm database changes
+                if (showApplyDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showApplyDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                isLoading = true
+                                showApplyDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showApplyDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            Text(
+                                text = "Are you sure you want to apply the modification to the database?\nAll lost data will be lost forever.",
+                                color = Color.Black
+                            )
+                        }
+                    )
+                }
 
 
 
@@ -266,9 +360,8 @@ class ManageComponentActivity : ComponentActivity() {
                                 skillBeingEdited!!.description = skillDescription
                                 skillBeingEdited!!.coefficient = skillCoefficient
 
-                                if (skillsToEdit.find {it.id == skillBeingEdited!!.id } == null){
-                                    skillsToEdit.add(skillBeingEdited!!.copy())
-                                }
+                                skillsToEdit.add(skillBeingEdited!!)
+
                                 showEditSkillDialog = false
                             }) {
                                 Text("Confirm")
@@ -311,12 +404,7 @@ class ManageComponentActivity : ComponentActivity() {
                         onDismissRequest = { showDeleteSkillDialog = false },
                         confirmButton = {
                             TextButton(onClick = {
-                                if (skillsToDelete.find {it.id == skillBeingDeleted!!.id } == null){
-                                    skillsToDelete.add(skillBeingDeleted!!)
-                                }
-                                if (skillsToAdd.find {it.id == skillBeingDeleted!!.id } == null){
-                                    skillsToAdd.remove(skillBeingDeleted!!)
-                                }
+                                skillsToDelete.add(skillBeingDeleted!!)
                                 component.skills -= skillBeingDeleted!!
                                 showDeleteSkillDialog = false
                             }) {
@@ -327,7 +415,11 @@ class ManageComponentActivity : ComponentActivity() {
                             TextButton(onClick = { showDeleteSkillDialog = false }) {
                                 Text("Dismiss")
                             }
-                        }
+                        },
+                        text = { Text(
+                            text = "Delete the skill: ${skillBeingDeleted!!.name}?",
+                            color = Color.Black
+                        )}
                     )
                 }
 
@@ -351,13 +443,7 @@ class ManageComponentActivity : ComponentActivity() {
                                     this.description = skillDescription
                                     this.coefficient = skillCoefficient
                                 }
-
-                                if (skillsToAdd.find {it.id == skillBeingAdded!!.id } == null){
-                                    skillsToAdd.add(skillBeingAdded!!)
-                                }
-                                if (skillsToDelete.find {it.id == skillBeingAdded!!.id } == null){
-                                    skillsToDelete.remove(skillBeingAdded!!)
-                                }
+                                skillsToAdd.add(skillBeingAdded!!)
                                 component.skills += skillBeingAdded!!
                                 showAddingSkillDialog = false
                             }) {
@@ -409,9 +495,7 @@ class ManageComponentActivity : ComponentActivity() {
 
                                 pairBeingEdited!!.group = selectedGroup!!
                                 pairBeingEdited!!.tutor = selectedTutor!!
-                                if (pairsToEdit.find { it.id != pairBeingEdited!!.id } == null) {
-                                    pairsToEdit.add(pairBeingEdited!!)
-                                }
+                                pairsToEdit.add(pairBeingEdited!!)
 
                                 showEditPairDialog = false
                             },
@@ -506,6 +590,7 @@ class ManageComponentActivity : ComponentActivity() {
                                 if (pairsToDelete.find { it.id != pairBeingDeleted!!.id } == null) {
                                     pairsToDelete.add(pairBeingDeleted!!)
                                 }
+
                                 component.pairs -= pairBeingDeleted!!
                                 showDeletePairDialog = false
                             }) {
@@ -523,8 +608,105 @@ class ManageComponentActivity : ComponentActivity() {
                             )
 
                         }
-                        )
-                    }
+                    )
+                }
+
+
+                // AlertDialog for adding pair
+                if (showAddingPairDialog) {
+
+                    AlertDialog(
+                        onDismissRequest = { showAddingPairDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+
+                                pairBeingAdded = TutorMapping {
+                                    this.component = component
+                                    this.group = selectedGroup!!
+                                    this.tutor = selectedTutor!!
+                                }
+
+                                if (pairsToAdd.filter { it.component == component }.filter { it.group == selectedGroup }.find { it.tutor == selectedTutor } == null) {
+                                    pairsToEdit.add(pairBeingAdded!!)
+                                }
+                                val obsoletePairDelete = pairsToDelete.filter { it.component == component }.filter { it.group == selectedGroup }.find { it.tutor == selectedTutor }
+                                if (obsoletePairDelete != null) {
+                                    pairsToDelete.remove(obsoletePairDelete)
+                                }
+                                component.pairs += pairBeingAdded!!
+                                showAddingPairDialog = false
+                            },
+                                enabled = (selectedGroup != null) and (selectedTutor != null)
+
+                            ) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAddingPairDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = "Group: ")
+                                    Box {
+                                        Text(
+                                            text = selectedGroup?.name ?: "Select a group",
+                                            modifier = Modifier
+                                                .clickable { expandedGroup = true }
+                                                .padding(8.dp)
+                                        )
+                                        DropdownMenu(
+                                            expanded = expandedGroup,
+                                            onDismissRequest = { expandedGroup = false }
+                                        ) {
+                                            groups.forEach { group ->
+                                                DropdownMenuItem(
+                                                    text = { Text(text = group.name)},
+                                                    onClick = {
+                                                        selectedGroup = group
+                                                        expandedGroup = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = "Tutor: ")
+                                    Box {
+                                        Text(
+                                            text = if (selectedTutor != null) "${selectedTutor!!.firstName} ${selectedTutor!!.lastName}" else "Select a Tutor",
+                                            modifier = Modifier
+                                                .clickable { expandedTutor = true }
+                                                .padding(8.dp)
+                                        )
+                                        DropdownMenu(
+                                            expanded = expandedTutor,
+                                            onDismissRequest = { expandedTutor = false }
+                                        ) {
+                                            tutors.forEach { tutor ->
+                                                DropdownMenuItem(
+                                                    text = { Text(text = "${tutor.firstName} ${tutor.lastName}")},
+                                                    onClick = {
+                                                        selectedTutor = tutor
+                                                        expandedTutor = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+
 
 
 
@@ -654,7 +836,7 @@ class ManageComponentActivity : ComponentActivity() {
 
                     item {
                         Button(
-                            onClick = { /* Assign tutor to group */ },
+                            onClick = { showAddingPairDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Assign a tutor to a group")
@@ -665,7 +847,7 @@ class ManageComponentActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
-                            onClick = { /* APPLY MODIFICATIONS */ },
+                            onClick = { showApplyDialog = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Apply modifications")

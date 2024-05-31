@@ -199,7 +199,7 @@ object Schemas {
         val coefficient = int("coefficient").bindTo { it.coefficient }
     }
 
-    object GroupObservations : Table<GroupObservation>("group_skill_mapping") {
+    object GroupObservations : Table<GroupObservation>("group_observation") {
         val id = int("id").primaryKey().bindTo { it.id}
         val skillId = int("skill_id").references(Skills) { it.skill }
         val groupId = int("group_id").references(Groups) { it.group }
