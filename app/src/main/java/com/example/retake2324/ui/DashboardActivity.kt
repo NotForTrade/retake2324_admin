@@ -82,6 +82,19 @@ class DashboardActivity : ComponentActivity() {
                     }
 
 
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, ManageGroupsActivity::class.java)
+                            intent.putExtra("tutorId", tutorId)
+                            startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Manage Groups")
+                    }
+
 
 /*
                     // Frame for personal and group buttons

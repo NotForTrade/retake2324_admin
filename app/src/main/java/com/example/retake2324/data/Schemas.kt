@@ -59,7 +59,7 @@ interface Role : Entity<Role> {
 interface Group : Entity<Group> {
     companion object : Entity.Factory<Group>()
     var id:  Int
-    var customer: User?
+    var customer: String?
     var name: String
     var students: List<User>
 }
@@ -164,7 +164,7 @@ object Schemas {
 
     object Groups : Table<Group>("group") {
         val id = int("id").primaryKey().bindTo { it.id}
-        val customerId = int("customer_id").references(Users) { it.customer }
+        val customer = varchar("customer").bindTo { it.customer }
         val name = varchar("name").bindTo { it.name }
     }
 
