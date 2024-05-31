@@ -496,6 +496,39 @@ class ManageComponentActivity : ComponentActivity() {
                 }
 
 
+                // AlertDialog for deleting pair
+                if (showDeletePairDialog) {
+
+                    AlertDialog(
+                        onDismissRequest = { showDeletePairDialog = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (pairsToDelete.find { it.id != pairBeingDeleted!!.id } == null) {
+                                    pairsToDelete.add(pairBeingDeleted!!)
+                                }
+                                component.pairs -= pairBeingDeleted!!
+                                showDeletePairDialog = false
+                            }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeletePairDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            Text(
+                                text = "De-assign the tutor ${pairBeingDeleted!!.tutor.firstName} ${pairBeingDeleted!!.tutor.lastName} to the group ${pairBeingDeleted!!.group.name}?"
+                            )
+
+                        }
+                        )
+                    }
+
+
+
+
                 LazyColumn(modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp)) {
@@ -604,7 +637,10 @@ class ManageComponentActivity : ComponentActivity() {
                                             contentDescription = "Edit Pair"
                                         )
                                     }
-                                    IconButton(onClick = { component.pairs -= pair }) {
+                                    IconButton(onClick = {
+                                        pairBeingDeleted = pair
+                                        showDeletePairDialog = true
+                                    }) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
                                             contentDescription = "Delete Pair"
