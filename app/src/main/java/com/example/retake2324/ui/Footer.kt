@@ -47,7 +47,7 @@ fun Footer(studentId: Int) {
                 label = { Text("Logout") },
                 selected = false,
                 onClick = {
-                    /*
+
                     // Create an Intent to start the login activity
                     val intent = Intent(context, LoginActivity::class.java).apply {
                         // Clear any existing task and start a new one
@@ -56,7 +56,6 @@ fun Footer(studentId: Int) {
                     // Start the login activity
                     context.startActivity(intent)
 
-                    */
                 }
             )
         },

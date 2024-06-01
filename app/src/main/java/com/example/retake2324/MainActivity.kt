@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import com.example.retake2324.core.App
 import com.example.retake2324.ui.DashboardActivity
+import com.example.retake2324.ui.LoginActivity
 
 
 class MainActivity : AppCompatActivity() {
@@ -19,7 +20,7 @@ class MainActivity : AppCompatActivity() {
         // Check if user is logged in
         // val isLoggedIn = checkLoginStatus()
 
-         val intent = Intent(this, DashboardActivity::class.java)
+         val intent = Intent(this, LoginActivity::class.java)
         startActivity(intent)
         finish() // Close MainActivity
 
