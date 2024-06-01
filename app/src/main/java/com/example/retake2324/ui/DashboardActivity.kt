@@ -33,7 +33,7 @@ class DashboardActivity : ComponentActivity() {
         val app = application as App
 
         setContent {
-            val tutorId = intent.getIntExtra("studentId", 12)
+            val tutorId = intent.getIntExtra("tutorId", -1)
             DashboardScreen(app, tutorId)
         }
     }

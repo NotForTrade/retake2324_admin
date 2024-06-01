@@ -74,7 +74,7 @@ class ComponentsOverviewActivity : ComponentActivity() {
 
         val app = application as App
 
-        val tutorId = intent.getIntExtra("tutorId", 12)
+        val tutorId = intent.getIntExtra("tutorId", -1)
 
         setContent {
             MaterialTheme {
@@ -450,13 +450,16 @@ class ComponentsOverviewActivity : ComponentActivity() {
                         }
                     }
                     item {
+
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Button(
-                            onClick = { showAddComponentDialog = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Create a new component")
+                        if (tutor.role.name != "Tutor") {
+                            Button(
+                                onClick = { showAddComponentDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Create a new component")
+                            }
                         }
                     }
                 }
