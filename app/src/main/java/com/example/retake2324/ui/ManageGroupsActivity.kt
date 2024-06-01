@@ -198,6 +198,7 @@ class ManageGroupsActivity : ComponentActivity() {
         var showDeleteGroupDialog by remember { mutableStateOf(false) }
 
         var expandedCustomer by remember { mutableStateOf(false) }
+        var expandedGroup by remember { mutableStateOf(false) }
 
 
         Scaffold(
@@ -302,6 +303,29 @@ class ManageGroupsActivity : ComponentActivity() {
                     }
                 }
 
+
+                LaunchedEffect(editStudent) {
+                    if (editStudent) {
+                        try {
+                            val database = app.getDatabase()
+                            withContext(Dispatchers.IO) {
+                                database.sequenceOf(Schemas.Users).update(selectedStudent!!)
+                            }
+                            Log.d("EDIT STUDENT", "################################## SUCCESS ##################################")
+                            // Reload the activity
+                            val intent = Intent(context, ManageGroupsActivity::class.java)
+                            intent.putExtra("tutorId", tutor.id)
+                            startActivity(intent)
+                            editGroup = false
+                        }catch (e: Exception){
+                            Log.e("EDIT STUDENT ERR", e.toString())
+                            editGroup = false
+                        }
+                    }
+                }
+
+
+
                 // Dialog to add a group
                 if (showAddGroupDialog) {
                     groupName = ""
@@ -310,7 +334,7 @@ class ManageGroupsActivity : ComponentActivity() {
                         onDismissRequest = { showAddGroupDialog = false },
                         confirmButton = {
                             TextButton(
-                                modifier = Modifier.clickable { groupName != ""},
+                                enabled = groupName != "",
                                 onClick = {
                                 createGroup = true
                                 showAddGroupDialog = false
@@ -333,7 +357,7 @@ class ManageGroupsActivity : ComponentActivity() {
                                     onValueChange = {
                                         groupName = it
                                     },
-                                    label = { Text("Component name") }
+                                    label = { Text("Group name") }
                                 )
 
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -341,7 +365,7 @@ class ManageGroupsActivity : ComponentActivity() {
                                 Text(text = "Customer: ")
                                 Box {
                                     Text(
-                                        text = selectedCustomer ?: "Enter the group's name",
+                                        text = selectedCustomer ?: "Select a customer",
                                         modifier = Modifier
                                             .clickable { expandedCustomer = true }
                                             .padding(8.dp),
@@ -381,7 +405,7 @@ class ManageGroupsActivity : ComponentActivity() {
                         onDismissRequest = { showEditGroupDialog = false },
                         confirmButton = {
                             TextButton(
-                                modifier = Modifier.clickable { groupName != ""},
+                                enabled = groupName != "",
                                 onClick = {
                                     selectedGroup!!.name = groupName
                                     selectedGroup!!.customer = selectedCustomer
@@ -472,6 +496,67 @@ class ManageGroupsActivity : ComponentActivity() {
                     )
                 }
 
+
+                // Dialog to edit a student
+                if (showEditStudentDialog) {
+                    selectedGroup = selectedStudent!!.group
+                    val groupList = mutableListOf<Group?>()
+                    groupList.addAll(groups)
+                    groupList.add(null)
+                    AlertDialog(
+                        onDismissRequest = { showEditStudentDialog = false },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    selectedStudent!!.group = selectedGroup
+                                    editStudent = true
+                                    showEditStudentDialog = false
+                                }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showEditStudentDialog = false
+                            }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                            Column {
+                                Text(text = "Group: ")
+                                Box {
+                                    Text(
+                                        text = selectedGroup?.name ?: "Not in a group",
+                                        modifier = Modifier
+                                            .clickable { expandedGroup = true }
+                                            .padding(8.dp),
+                                        color = Color.Black
+                                    )
+                                    DropdownMenu(
+                                        expanded = expandedGroup,
+                                        onDismissRequest = { expandedGroup = false }
+                                    ) {
+                                        groupList.forEach { group ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        text = group?.name ?: "-",
+                                                        color = Color.Black
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedGroup = group
+                                                    expandedGroup = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
 
 
 
