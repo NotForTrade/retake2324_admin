@@ -64,6 +64,7 @@ import org.ktorm.dsl.isNotNull
 import org.ktorm.entity.add
 import org.ktorm.entity.filter
 import org.ktorm.entity.find
+import org.ktorm.entity.removeIf
 import org.ktorm.entity.toList
 import org.ktorm.entity.sequenceOf
 import org.ktorm.entity.update
@@ -200,7 +201,7 @@ class ManageGroupsActivity : ComponentActivity() {
 
 
         Scaffold(
-            topBar = { Header("Components Overview", app) },
+            topBar = { Header("Manage Groups", app) },
             bottomBar = { Footer(tutor.id) }
         ) { innerPadding ->
             Box (
@@ -242,9 +243,69 @@ class ManageGroupsActivity : ComponentActivity() {
                 }
 
 
+
+                LaunchedEffect(editGroup) {
+                    if (editGroup) {
+                        try {
+                            val database = app.getDatabase()
+                            withContext(Dispatchers.IO) {
+                                database.sequenceOf(Schemas.Groups).update(selectedGroup!!)
+                            }
+                            Log.d("EDIT GROUP SUCCESS", "##################################")
+                            // Reload the activity
+                            val intent = Intent(context, ManageGroupsActivity::class.java)
+                            intent.putExtra("tutorId", tutor.id)
+                            startActivity(intent)
+                            editGroup = false
+                        }catch (e: Exception){
+                            Log.e("ADD COMPONENT ERROR", e.toString())
+                            editGroup = false
+                        }
+                    }
+                }
+
+
+                LaunchedEffect(deleteGroup) {
+                    if (deleteGroup) {
+                        try {
+                            val database = app.getDatabase()
+                            withContext(Dispatchers.IO) {
+                                // Remove the group of each students that were in that group
+                                val studentRole = database.sequenceOf(Schemas.Roles).find { it.name eq "Student" }
+                                val students = database.sequenceOf(Schemas.Users)
+                                    .filter { it.roleId eq studentRole!!.id }
+                                    .filter { it.groupId eq selectedGroup!!.id }
+                                    .toList()
+                                students.forEach { student ->
+                                    student.group = null
+                                    database.sequenceOf(Schemas.Users).update(student)
+                                }
+                                // Delete all the TutorMappings associated to the selected group
+                                database.sequenceOf(Schemas.TutorMappings).removeIf { it.groupId eq selectedGroup!!.id }
+                                // Delete all the Announcements associated to the selected group
+                                database.sequenceOf(Schemas.Announcements).removeIf { it.groupId eq selectedGroup!!.id }
+                                // Delete all the Group observations associated to the selected group
+                                database.sequenceOf(Schemas.GroupObservations).removeIf { it.groupId eq selectedGroup!!.id }
+                                // Delete the group
+                                database.sequenceOf(Schemas.Groups).removeIf { it.id eq selectedGroup!!.id }
+                            }
+                            Log.d("DELETE GROUP SUCCESS", "##################################")
+                            // Reload the activity
+                            val intent = Intent(context, ManageGroupsActivity::class.java)
+                            intent.putExtra("tutorId", tutor.id)
+                            startActivity(intent)
+                            deleteGroup = false
+                        }catch (e: Exception){
+                            Log.e("DELETE COMPONENT ERROR", e.toString())
+                            deleteGroup = false
+                        }
+                    }
+                }
+
                 // Dialog to add a group
                 if (showAddGroupDialog) {
                     groupName = ""
+                    selectedCustomer = null
                     AlertDialog(
                         onDismissRequest = { showAddGroupDialog = false },
                         confirmButton = {
@@ -273,6 +334,79 @@ class ManageGroupsActivity : ComponentActivity() {
                                         groupName = it
                                     },
                                     label = { Text("Component name") }
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Text(text = "Customer: ")
+                                Box {
+                                    Text(
+                                        text = selectedCustomer ?: "Enter the group's name",
+                                        modifier = Modifier
+                                            .clickable { expandedCustomer = true }
+                                            .padding(8.dp),
+                                        color = Color.Black
+                                    )
+                                    DropdownMenu(
+                                        expanded = expandedCustomer,
+                                        onDismissRequest = { expandedCustomer = false }
+                                    ) {
+                                        customerList.forEach { customer ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        text = customer,
+                                                        color = Color.Black
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedCustomer = customer
+                                                    expandedCustomer = false
+                                                }
+
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+
+                // Dialog to edit a group
+                if (showEditGroupDialog) {
+                    groupName = selectedGroup!!.name
+                    selectedCustomer = selectedGroup!!.customer
+                    AlertDialog(
+                        onDismissRequest = { showEditGroupDialog = false },
+                        confirmButton = {
+                            TextButton(
+                                modifier = Modifier.clickable { groupName != ""},
+                                onClick = {
+                                    selectedGroup!!.name = groupName
+                                    selectedGroup!!.customer = selectedCustomer
+                                    editGroup = true
+                                    showEditGroupDialog = false
+                                }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showEditGroupDialog = false
+                            }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+
+                            Column {
+                                TextField(
+                                    value = groupName,
+                                    onValueChange = {
+                                        groupName = it
+                                    },
+                                    label = { Text("Enter the group's name") }
                                 )
 
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -312,6 +446,31 @@ class ManageGroupsActivity : ComponentActivity() {
                     )
                 }
 
+                // Dialog to delete a group
+                if (showDeleteGroupDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteGroupDialog = false },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    deleteGroup = true
+                                    showDeleteGroupDialog = false
+                                }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showDeleteGroupDialog = false
+                            }) {
+                                Text("Dismiss")
+                            }
+                        },
+                        text = {
+                                Text(text = "Delete the group: ${selectedGroup!!.name}?")
+                        }
+                    )
+                }
 
 
 
@@ -341,6 +500,15 @@ class ManageGroupsActivity : ComponentActivity() {
                                             Icon(
                                                 imageVector = Icons.Default.Edit,
                                                 contentDescription = "Edit Group"
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            showDeleteGroupDialog = true
+                                            selectedGroup = group
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete Skill"
                                             )
                                         }
                                         IconButton(onClick = { isExpanded = !isExpanded }) {
@@ -407,34 +575,36 @@ class ManageGroupsActivity : ComponentActivity() {
                                     )
                                 }
                            }
-                           studentsWithoutGroup.forEach { student ->
-                                Row(
-                                    modifier = Modifier.padding(
-                                        start = 16.dp,
-                                        top = 4.dp,
-                                        bottom = 4.dp
-                                    )
-                                ) {
-                                    Text(
-                                        text = "${student.firstName} ${student.lastName}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier
-                                            .padding(horizontal = 4.dp)
-                                            .clickable {
-                                                // todo navigateToProfile
-                                            }
-                                    )
-                                    IconButton(onClick = {
-                                        showEditStudentDialog = true
-                                        selectedStudent = student
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Edit,
-                                            contentDescription = "Edit Pair"
-                                        )
-                                    }
-                                }
-                            }
+                           if (isExpanded) {
+                               studentsWithoutGroup.forEach { student ->
+                                   Row(
+                                       modifier = Modifier.padding(
+                                           start = 16.dp,
+                                           top = 4.dp,
+                                           bottom = 4.dp
+                                       )
+                                   ) {
+                                       Text(
+                                           text = "${student.firstName} ${student.lastName}",
+                                           style = MaterialTheme.typography.bodyMedium,
+                                           modifier = Modifier
+                                               .padding(horizontal = 4.dp)
+                                               .clickable {
+                                                   // todo navigateToProfile
+                                               }
+                                       )
+                                       IconButton(onClick = {
+                                           showEditStudentDialog = true
+                                           selectedStudent = student
+                                       }) {
+                                           Icon(
+                                               imageVector = Icons.Default.Edit,
+                                               contentDescription = "Edit Pair"
+                                           )
+                                       }
+                                   }
+                               }
+                           }
                         }
                     }
 
