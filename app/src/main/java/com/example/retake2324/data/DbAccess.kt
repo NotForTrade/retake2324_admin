@@ -8,7 +8,9 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
 
-const val SQL_host = "10.0.2.2" // NB: docker container, "magic" IP used for the emulator to access localhost
+const val SQL_host = "10.0.2.2" // address for AVD
+//const val SQL_host = "192.168.137.1" // address for apk
+
 const val SQL_port = 3306
 
 const val SQL_url = "jdbc:mysql://$SQL_host:$SQL_port/test"
